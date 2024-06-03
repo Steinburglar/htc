@@ -185,9 +185,9 @@ class Settings:
             )
 
         # Directories relative to this file
-        self.htc_package_dir = Path(__file__).parent
-        self.models_dir = self.htc_package_dir / "models"
-        self.src_dir = self.htc_package_dir.parent
+        self.htc_package_dir = Path(__file__).parent #parent directory to current file
+        self.models_dir = self.htc_package_dir / "models" #finds models dir
+        self.src_dir = self.htc_package_dir.parent #parent to htc package
         if not (self.src_dir / ".gitignore").exists():
             # The source directory is only available when the package is installed in editable mode
             # Otherwise (when installed as package), src_dir is not meaningful (it will point to the site-packages folder)

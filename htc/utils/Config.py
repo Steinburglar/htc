@@ -98,7 +98,7 @@ class Config:
             if not path_or_dict.name.endswith(".json"):
                 path_or_dict = path_or_dict.with_name(path_or_dict.name + ".json")
 
-            # Find the location to the config file
+            # Find the location to the config file, seaching throu possibilities detailed above
             for p in Config._get_possible_paths(path_or_dict):
                 if p.exists():
                     self.path_config = unify_path(p)
@@ -122,7 +122,7 @@ class Config:
                     # Standard dict
                     self.data[k] = v
 
-        if self["inherits"]:
+        if self["inherits"]: #if the .json inherits data from another jso, this finds that earlier json and merges it with the child file
             extension = "" if self["inherits"].endswith(".json") else ".json"
             inherits = Path(self["inherits"] + extension)
 
@@ -157,7 +157,7 @@ class Config:
         else:
             self._used_keys = {}
 
-    def _extend_lists(self) -> None:
+    def _extend_lists(self) -> None: #if i have a key with a list value, and I want to extend that lost, rather than rewriting in the jso, I can just add key_extends with the value equal to what I want to add (list)
         # Users can extend additional lists by adding the same key with _extends appended
         for k, v in self.items():
             if k.endswith("_extends") and type(v) == list:

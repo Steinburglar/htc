@@ -644,3 +644,6 @@ docker-compose.override.yml
 *.pkl
 *.pdf
 *.lprof
+
+#data directories
+tests/
