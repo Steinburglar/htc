@@ -1280,6 +1280,7 @@ class DataPath:
         data_dir: Path,
         filters: Union[list[Callable[[Self], bool]], None] = None,
         annotation_name: Union[str, list[str]] = None,
+        dataset_settings: Path = None
     ) -> Iterator[Self]:
         """
         Helper function to iterate over the folder structure of a dataset (e.g. subjects folder), yielding one image at a time.
@@ -1302,7 +1303,8 @@ class DataPath:
             data_dir: The path where the data is stored. The data folder should contain a dataset_settings.json file.
             filters: List of filters which can be used to alter the set of images returned by this function. Every filter receives a DataPath instance and the instance is only yielded when all filter return True for this path.
             annotation_name: Include only paths with this annotation name and use it as default in read_segmentation(). Must either be a lists of annotation names or as string in the form name1&name2 (which will automatically be converted to ['name1', 'name2']). If None, no default annotation name will be set and no images will be filtered by annotation name.
-
+            Dataset_settings: Path to the desired dataset_settings.json folder. this is an extra parameter added by Lucas Steinberger to allow a user
+                to explicitly define a dataset_settings json that is not inside the dataset, in the case of working with the Tissue atlas Data structure. 
         Returns: Generator with all path objects.
         """
         if filters is None:
@@ -1318,10 +1320,28 @@ class DataPath:
                 lambda p: p.meta("annotation_name") is not None
                 and len(set(p.meta("annotation_name")).intersection(annotation_name)) > 0
             )
-
-        dsettings = DatasetSettings(data_dir / "dataset_settings.json")
-        DataPathClass = dsettings.data_path_class()
-        if DataPathClass is None:
+            
+        if dataset_settings == None:
+            dsettings = DatasetSettings(data_dir / "dataset_settings.json") #if un-specified by user
+            
+        else: #in the case where the user specifies an external path the a json
+            if not (isinstance(dataset_settings, str) or isinstance(dataset_settings, Path)):
+                raise TypeError("your specified dataset_settings.json path is not the right type."
+                " dataset_settings must be a path object or a string of the absolute path")
+                
+            else:
+                if isinstance(dataset_settings, str):
+                    dataset_settings = Path(dataset_settings)
+                
+                if not dataset_settings.exists():
+                    raise ValueError("The Path you provided to a dataset_settings.json file does not exist."
+                                " please check that the path is written correctly")
+            
+            dsettings = DatasetSettings(dataset_settings)
+            
+        DataPathClass = dsettings.data_path_class() # user can specify DataPath class in .json (e.g, DataPathAtlas)
+        
+        if DataPathClass is None: #if a special DataPathClass was specified, the function will skip to the end an yield from that classes own iterate function
             # The user may provide a subpath to the dataset, e.g. DataPath.iterate(settings.data_dirs.sepsis_ICU / "calibrations")
             # In this case, we still want to use the DataPathSepsisICU class which is specified in the dataset_settings.json file in the root data directory
             dataset_entry = settings.datasets.find_entry(data_dir)

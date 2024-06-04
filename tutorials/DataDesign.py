@@ -20,6 +20,7 @@ jsonpath = "path/to/my/dataset_settings.json"
 #create a list of all the desired data directories that you want the htc to load
 
 ###should this be done using path environment?
+#each directory that should be treated as a "dataset" should have a path env variable to it, ideally with a unique shortcut
 directories_list = ["path/to/directory/1", "path/to/directory/2",] #fill with as many directories as desired
 paths = [] #initialize paths
 for directory in directories_list:

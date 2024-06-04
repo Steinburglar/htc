@@ -73,7 +73,7 @@ class Datasets:
 
         msg = f"Network directory: {self.network if self.network is not None else '(not set)'}\n"
         msg += "Registered data directories:\n" + "\n".join(dirs)
-        return msg
+        return msg 
 
     def __iter__(self) -> Iterator[tuple[str, dict]]:
         """
@@ -92,8 +92,8 @@ class Datasets:
         self,
         env_name: str,
         network_folder: str = None,
-        data_folder: str = "data",
-        intermediates_folder: str = "intermediates",
+        data_folder: str = "data", #automatically tries to find, but can be specifically set! good for us
+        intermediates_folder: str = "intermediates", #same here
         shortcut: str = None,
         additional_names: list[str] = None,
     ) -> None:
@@ -115,18 +115,18 @@ class Datasets:
             )
 
         # User may disable an env variable via PATH_Tivita_multiorgan_semantic=''
-        if path_env := os.getenv(env_name, False):
+        if path_env := os.getenv(env_name, False): #True if the env_name is set
             # Here, we are only interested in the path, not the options
             path_env, _ = Datasets.parse_path_options(path_env)
             path_env = unify_path(path_env)
-            path_env_data = path_env / data_folder
+            path_env_data = path_env / data_folder ##problematic line here for us
 
             if not path_env.exists():
                 self.log.warning(
                     f"The environment variable {env_name} was set to {path_env} but the path does not exist"
                 )
             else:
-                if not path_env_data.exists():
+                if not path_env_data.exists(): #warns if the "data" folder doesnt exists - will have to be changed for atlas
                     self.log.warning(
                         f"The environment variable {env_name} was set to {path_env} and the path exists, but the data"
                         f" folder {data_folder} does not exist. Did you set a wrong data_folder_name?"
@@ -157,9 +157,9 @@ class Datasets:
 
         if path_entry is not None:
             if network_folder is None:
-                dataset_name = path_entry["path_dataset"].name
+                dataset_name = path_entry["path_dataset"].name #if local
             else:
-                dataset_name = network_folder
+                dataset_name = network_folder #if network
             self.dataset_names.append(dataset_name)
 
             # Each directory should be at least accessible via its environment variable name (e.g. PATH_Tivita_multiorgan_semantic) or the name of the folder (e.g. 2021_02_05_Tivita_multiorgan_semantic)
