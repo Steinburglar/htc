@@ -1280,7 +1280,7 @@ class DataPath:
         data_dir: Path,
         filters: Union[list[Callable[[Self], bool]], None] = None,
         annotation_name: Union[str, list[str]] = None,
-        dataset_settings: Path = None
+        dataset_settings: Path = None #added  by lucas Steinberger to introduce explicitly defining dataset_settings.json location
     ) -> Iterator[Self]:
         """
         Helper function to iterate over the folder structure of a dataset (e.g. subjects folder), yielding one image at a time.
@@ -1303,8 +1303,8 @@ class DataPath:
             data_dir: The path where the data is stored. The data folder should contain a dataset_settings.json file.
             filters: List of filters which can be used to alter the set of images returned by this function. Every filter receives a DataPath instance and the instance is only yielded when all filter return True for this path.
             annotation_name: Include only paths with this annotation name and use it as default in read_segmentation(). Must either be a lists of annotation names or as string in the form name1&name2 (which will automatically be converted to ['name1', 'name2']). If None, no default annotation name will be set and no images will be filtered by annotation name.
-            Dataset_settings: Path to the desired dataset_settings.json folder. this is an extra parameter added by Lucas Steinberger to allow a user
-                to explicitly define a dataset_settings json that is not inside the dataset, in the case of working with the Tissue atlas Data structure. 
+            Dataset_settings: Path to the desired dataset_settings.json folder. This is an extra parameter added to allow a user
+            to explicitly define a dataset_settings json that is not inside the dataset, in the case of working with the Tissue atlas Data structure. 
         Returns: Generator with all path objects.
         """
         if filters is None:
@@ -1325,6 +1325,7 @@ class DataPath:
             dsettings = DatasetSettings(data_dir / "dataset_settings.json") #if un-specified by user
             
         else: #in the case where the user specifies an external path the a json
+            specified = True #for use at the end of the function
             if not (isinstance(dataset_settings, str) or isinstance(dataset_settings, Path)):
                 raise TypeError("your specified dataset_settings.json path is not the right type."
                 " dataset_settings must be a path object or a string of the absolute path")
@@ -1378,4 +1379,8 @@ class DataPath:
         else:
             annotation_name_subclass = None
 
-        yield from DataPathClass.iterate(data_dir, filters, annotation_name_subclass)
+        if specified:
+            yield from DataPathClass.iterate(data_dir, filters, annotation_name_subclass, dataset_settings) 
+            #only works for classes designed to accept extra dataset_settings parameter. See iterate method of the the DataPath child classes. (e.g, DataPathAtlas)
+        else:
+            yield from DataPathClass.iterate(data_dir, filters, annotation_name_subclass)

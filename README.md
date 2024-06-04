@@ -46,6 +46,9 @@ If you use the `htc` framework, please consider citing the [corresponding papers
 </details>
 
 ## Setup
+IMPORTANT!: for the modified version of the htc framework for use with Tissue atlas data, there is no package installation available. Instead, you must clone the repository from the github (be sure to clone this fork, the one owned by user Steinburglar).
+I recommend cloning it as a development environment with conda. see below for further instructions: **write these lucas**
+
 ### Package Installation
 This package can be installed via pip:
 ```bash
