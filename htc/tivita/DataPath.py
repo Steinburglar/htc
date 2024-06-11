@@ -1333,25 +1333,14 @@ class DataPath:
                 and len(set(p.meta("annotation_name")).intersection(annotation_name)) > 0
         )
         #first, see if externals exists and use that:
-        if settings.external_dir['PATH_HTC_EXTERNAL']:
+        if settings.external_dir is not None and (path := settings.external_dir['PATH_HTC_EXTERNAL']['path_dataset']/ 'data' /'dataset_settings.json').exists():
+                dsettings = DatasetSettings(path)
+        #then try other options:
+        else:
             dsettings = DatasetSettings(data_dir / "dataset_settings.json")
-        
-        if settings.external_dir is not None and (path := settings.external_dir/ 'data' /'dataset_settings.json').exists():
-                settings._dataset_settings = DatasetSettings(path)
-            elif self.image_dir is not None and (path := self.image_dir / "dataset_settings.json").exists():
-                self._dataset_settings = DatasetSettings(path)
-            else:
-                self._dataset_settings = DatasetSettings(path_or_data={})
-                parent_paths = list(self.image_dir.parents)
-                for p in parent_paths:
-                    if (path := p / "dataset_settings.json").exists():
-                        self._dataset_settings = DatasetSettings(path)
-                        break
-        
+    
         
         DataPathClass = dsettings.data_path_class()
-        
-        
         
         
         if DataPathClass is None:
