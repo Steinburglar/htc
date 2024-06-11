@@ -109,7 +109,7 @@ class DataPath:
             self.timestamp = self.image_dir.name
         self.annotation_name_default = annotation_name_default
         
-        self.external_dir
+        self.external_dir = None
 
         #first check if an external directory is defined in path env. if so, uses that directory to overwrite the normal process 
         #now check if an intermediates directory was actually found. if not, go to "PATH_HTC_EXTERNAL"
@@ -1334,7 +1334,8 @@ class DataPath:
         )
         #first, see if externals exists and use that:
         if settings.external_dir is not None and (path := settings.external_dir['PATH_HTC_EXTERNAL']['path_dataset']/ 'data' /'dataset_settings.json').exists():
-                dsettings = DatasetSettings(path)
+            dsettings = DatasetSettings(path)
+            print("external directory found")
         #then try other options:
         else:
             dsettings = DatasetSettings(data_dir / "dataset_settings.json")

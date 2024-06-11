@@ -536,9 +536,9 @@ class Settings:
         Returns:
             Union[MultiPath, None]: Multi Path object for external directories
         """
-        
         if self._external is None:
             # Automatically add all externals which start with  PATH_HTC_EXTERNAL
+            self._external = Datasets()
             for env_name in os.environ.keys():
                 if not env_name.upper().startswith("PATH_HTC_EXTERNAL"):
                     continue

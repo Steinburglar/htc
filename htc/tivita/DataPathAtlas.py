@@ -57,17 +57,15 @@ class DataPathAtlas(DataPath):
         designed to be created/Accessed through three static functions:
             -from_image_name(): searches through available data and generates a Path object to a specific image, whose name is given as the arg
             -iterate(): iterates through all available images and creates a Path to each image. this is the primary way to load a 
-                for training/inference DONE!! :)
+                for training/inference
             -from_image_path(): less flexible that from_image_name, losses some information. 
             
-
         Args:
-            data_dir: The path where the data is stored. The data folder should contain a dataset_settings.json file.
-            filters: List of filters which can be used to alter the set of images returned by this function. Every filter receives a DataPath instance and the instance is only yielded when all filter return True for this path.
-            annotation_name: Include only paths with this annotation name and use it as default in read_segmentation(). Must either be a lists of annotation names or as string in the form name1&name2 (which will automatically be converted to ['name1', 'name2']). If None, no default annotation name will be set and no images will be filtered by annotation name.
-            Dataset_settings: Path to the desired dataset_settings.json folder. This is a parameter specific to the DataPathAtlass class, added to allow a user
-            to explicitly define a dataset_settings json that is not inside the dataset, in the case of working with the Tissue atlas Data structure. 
-        Returns: Generator with all path objects
+            image_dir: Path (or string) to the image directory (timestamp folder).
+            data_dir: Path (or string) to the data directory of the dataset (it should contain a dataset_settings.json file).
+            intermediates_dir: Path (or string) to the intermediates directory of the dataset.
+            dataset_settings: Reference to the settings of the dataset. If None and no settings could be found in the image directory, the parents of the image directory are searched. If available, the closest dataset_settings.json is used. Otherwise, the data path gets an empty dataset settings assigned.
+            annotation_name_default: Default annotation_name(s) which will be used when reading the segmentation with read_segmentation() with no arguments.
         """
         #use super().__init__ to pass arguments to DataPath __init__. This way the DataPathAtlas object has all the same attributes that a DataPath Object would.
         super().__init__(image_dir, data_dir, intermediates_dir, dataset_settings, annotation_name_default)

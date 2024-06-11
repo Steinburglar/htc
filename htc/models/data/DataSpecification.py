@@ -119,13 +119,9 @@ class DataSpecification:
                     
 
                 paths = []
-                dataset_settings = split_specs["dataset_settings"]
                 for image_name in split_specs["image_names"]:
-                    if DataPathClass == DataPathAtlas:
-                        paths.append(DataPathClass.from_image_name(image_name, Path(dataset_settings)))
-                    else:
-                        paths.append(DataPathClass.from_image_name(image_name))
-
+                    paths.append(DataPathClass.from_image_name(image_name))
+                
                 if split_key.startswith("test"):
                     fold_data_test[split_key] = paths
                 else:
