@@ -105,6 +105,9 @@ class Settings:
     - `CLUSTER_FOLDER`: Path on the cluster for your division and user (DKFZ internal). The default is E130 and your user ID so there is usually no need to set this variable. Example: `CLUSTER_FOLDER="OE0176/a267c"`
     - 'SHARED_FOLDER': Path on the cluster for your division. The datasets used by the tissue classification group are stored at this path. Example: `SHARED_FOLDER="OE0176/shared_htc"`
 
+    New environment variable for external storage of necessary metadata and intermediates, for the use with Tissue Atlas.
+    - 'PATH_HTC_EXTERNAL': Location of an "External" folder that should contain your dataset_settings.json and intermediates folder, as well as config.json when you write it with Config
+
     None of the variables are mandatory.
     """
 
@@ -317,11 +320,13 @@ class Settings:
             "DKFZ_USERID",
             "CLUSTER_FOLDER",
             "SHARED_FOLDER",
+            "PATH_HTC_EXTERNAL"
         )
 
         self._datasets = None
         self._intermediates_dir_all = None
         self._results_dir = None
+        self._external = None
 
     @property
     def should_add_network_alternatives(self) -> bool:
@@ -403,7 +408,10 @@ class Settings:
 
         Returns: `DatasetAccessor` object which can be used to access the intermediates dir by (short) name of the dataset. None if the requested dataset is not available.
         """
-        return DatasetAccessor(self.datasets, "path_intermediates")
+        if self.external_dir is not None: #propritizes intermidates folder in external directory
+            return DatasetAccessor(self.external_dir, "path_intermediates")      
+        else: #otherwise, paths normally to dataset directory
+            return DatasetAccessor(self.datasets, "path_intermediates")
 
     @property
     def intermediates_dir_all(self) -> Union[MultiPath, None]:
@@ -429,8 +437,10 @@ class Settings:
         if self._intermediates_dir_all is None:
             # Combine all intermediates from all data dirs into one variable
             dirs = []
-            for name in self.datasets.dataset_names:
-                found_entry = self.datasets.get(name, local_only=not self.should_add_network_alternatives)
+            for name in self.datasets.dataset_names + self.external_dir.dataset_names:
+                found_entry = self.external_dir.get(name, local_only=not self.should_add_network_alternatives)
+                if found_entry is None:
+                    found_entry = self.datasets.get(name, local_only=not self.should_add_network_alternatives)
                 if found_entry is None:
                     continue
 
@@ -515,5 +525,41 @@ class Settings:
         """
         return self.results_dir / "training" if self.results_dir is not None else None
 
+    @property
+    def external_dir(self) -> Datasets:
+        """
+        This property can be used to access an "external" directory for a dataset, which is not relative to any other directories
+        the external directory should be used in the case where you are unable to follow the normal data structure of dataset_settings.json and intermediates being part of the dataset,
+        but instead must store them externally.
+        
+        
+        Returns:
+            Union[MultiPath, None]: Multi Path object for external directories
+        """
+        
+        if self._external is None:
+            # Automatically add all externals which start with  PATH_HTC_EXTERNAL
+            for env_name in os.environ.keys():
+                if not env_name.upper().startswith("PATH_HTC_EXTERNAL"):
+                    continue
+                if env_name in self._external:
+                    continue
 
+                _, options = Datasets.parse_path_options(os.environ[env_name])
+                shortcut = options.get("shortcut", None)
+
+                # Per default, the external directory is accessible via three names. For example, for PATH_HTC_EXTERNAL_gallbladder=/my/dataset_folder_name:
+                # - PATH_Tivita_HeiPorSPECTRAL
+                # - dataset_folder_name
+                # - HeiPorSPECTRAL
+                self._external.add_dir(
+                    env_name,
+                    shortcut=shortcut,
+                    additional_names=[
+                        env_name.removeprefix("PATH_HTC_EXTERNAL"),
+                        env_name.upper().removeprefix("PATH_HTC_EXTERNAL"),
+                    ],
+                )
+
+        return self._external
 settings = Settings()

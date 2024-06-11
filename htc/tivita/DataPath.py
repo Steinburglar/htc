@@ -100,7 +100,7 @@ class DataPath:
             data_dir = Path(data_dir)
         if isinstance(intermediates_dir, str):
             intermediates_dir = Path(intermediates_dir)
-
+            
         self.image_dir = image_dir
         self.data_dir = data_dir
         self.intermediates_dir = intermediates_dir
@@ -108,15 +108,24 @@ class DataPath:
         if self.image_dir is not None:
             self.timestamp = self.image_dir.name
         self.annotation_name_default = annotation_name_default
+        
+        self.external_dir
 
-        if (data_dir is None or intermediates_dir is None) and self.image_dir is not None:
+        #first check if an external directory is defined in path env. if so, uses that directory to overwrite the normal process 
+        #now check if an intermediates directory was actually found. if not, go to "PATH_HTC_EXTERNAL"
+        if settings.external_dir is not None:
+            entry = settings.external_dir['PATH_HTC_EXTERNAL']
+            self.external_dir = entry["path_dataset"]
+            self.intermediates_dir = entry["path_intermediates"]
+        if (data_dir is None or intermediates_dir is None) and self.image_dir is not None: #else, use normal process
             # Check whether the image directory is from a known location so that we can infer data/intermediates
             entry = settings.datasets.find_entry(self.image_dir)
             if entry is not None:
                 if data_dir is None:
                     self.data_dir = entry["path_data"]
-                if intermediates_dir is None:
-                    self.intermediates_dir = entry["path_intermediates"]
+                if self.intermediates_dir is None: #changed to self.intermediates_dir, to keep track of change made above
+                    self.intermediates_dir = entry["path_intermediates"] #potential problem
+        
 
     def __call__(self, *args, **kwargs) -> Path:
         """
@@ -146,9 +155,12 @@ class DataPath:
         return self.image_name_annotations() < other.image_name_annotations()
 
     @property
-    def dataset_settings(self) -> DatasetSettings:
+    def dataset_settings(self) -> DatasetSettings: #problem_fixed?
         if self._dataset_settings is None:
-            if self.image_dir is not None and (path := self.image_dir / "dataset_settings.json").exists():
+            #first try to find dataset_settings in external directory. 
+            if self.external_dir is not None and (path := self.external_dir/ 'data' /'dataset_settings.json').exists():
+                self._dataset_settings = DatasetSettings(path)
+            elif self.image_dir is not None and (path := self.image_dir / "dataset_settings.json").exists():
                 self._dataset_settings = DatasetSettings(path)
             else:
                 self._dataset_settings = DatasetSettings(path_or_data={})
@@ -1140,10 +1152,12 @@ class DataPath:
                 return []
 
     @staticmethod
-    def _build_cache(local: bool) -> dict[str, Any]:
+    def _build_cache(local: bool) -> dict[str, Any]: #also problem line
         # We use a dict for the cache because it is much faster than a dataframe
         cache = {}
-
+        #two possible entry variables, one external one normal
+        if settings.external_dir is not None:
+            ext_entry = settings.external_dir['PATH_HTC_EXTERNAL']
         for env_key in settings.datasets.env_keys():
             if not env_key.upper().startswith("PATH_TIVITA"):
                 continue
@@ -1151,19 +1165,20 @@ class DataPath:
             entry = settings.datasets.get(env_key, local_only=local)
             if entry is None:
                 continue
-
+            chosen_entry = ext_entry if ext_entry is not None else entry #use for parts that should be external if possible
             if (local and entry["location"] == "local") or (not local and entry["location"] == "network"):
-                table_path = list((entry["path_intermediates"] / "tables").glob("*@meta.feather"))
+                table_path = list((chosen_entry["path_intermediates"] / "tables").glob("*@meta.feather"))
                 if len(table_path) > 0:
-                    assert len(table_path) == 1, f"More than one meta table found for {entry}"
+                    assert len(table_path) == 1, f"More than one meta table found for {chosen_entry}"
                     table_path = table_path[0]
 
-                    dsettings = DatasetSettings(entry["path_data"] / "dataset_settings.json")
+                    dsettings = DatasetSettings(chosen_entry["path_data"] / "dataset_settings.json") #problem line!!!
+                    
                     df = pd.read_feather(table_path)
-                    df["dsettings"] = dsettings
+                    df["dsettings"] = dsettings #external
                     df["dataset_env_name"] = env_key
                     df["data_dir"] = entry["path_data"]
-                    df["intermediates_dir"] = entry["path_intermediates"]
+                    df["intermediates_dir"] = chosen_entry["path_intermediates"] #external
 
                     # Append the metadata for the current dataset to the global cache
                     df.set_index("image_name", inplace=True)
@@ -1256,7 +1271,6 @@ class DataPath:
                     f"Could not find the path for the image {image_name} ({len(DataPath._local_cache()) = },"
                     f" {len(DataPath._network_cache()) = })"
                 )
-
                 DataPathClass = match["dsettings"].data_path_class()
                 if DataPathClass is None:
                     raise ValueError(
@@ -1280,9 +1294,142 @@ class DataPath:
         data_dir: Path,
         filters: Union[list[Callable[[Self], bool]], None] = None,
         annotation_name: Union[str, list[str]] = None,
-        dataset_settings: Path = None #added  by lucas Steinberger to introduce explicitly defining dataset_settings.json location
     ) -> Iterator[Self]:
         """
+        Helper function to iterate over the folder structure of a dataset (e.g. subjects folder), yielding one image at a time.
+
+        >>> paths = list(DataPath.iterate(settings.data_dirs.semantic))
+        >>> len(paths)
+        506
+
+        Only images from one pig:
+        >>> filter_pig = lambda p: p.subject_name == 'P041'
+        >>> paths = list(DataPath.iterate(settings.data_dirs.semantic, filters=[filter_pig]))
+        >>> len(paths)
+        4
+
+        For the default datasets, the path provided is expected to point to the `data` subfolder in the respective dataset directory.
+        >>> settings.data_dirs.semantic.name
+        'data'
+
+        Args:
+            data_dir: The path where the data is stored. The data folder should contain a dataset_settings.json file.
+            filters: List of filters which can be used to alter the set of images returned by this function. Every filter receives a DataPath instance and the instance is only yielded when all filter return True for this path.
+            annotation_name: Include only paths with this annotation name and use it as default in read_segmentation(). Must either be a lists of annotation names or as string in the form name1&name2 (which will automatically be converted to ['name1', 'name2']). If None, no default annotation name will be set and no images will be filtered by annotation name.
+
+        Returns: Generator with all path objects.
+        """
+        if filters is None:
+            filters = []
+
+        if type(annotation_name) == str:
+            annotation_name = annotation_name.split("&")
+
+        if annotation_name is not None:
+            annotation_name = set(annotation_name)
+            # We keep the path if it has at least one of the requested annotations
+            filters.append(
+                lambda p: p.meta("annotation_name") is not None
+                and len(set(p.meta("annotation_name")).intersection(annotation_name)) > 0
+        )
+        #first, see if externals exists and use that:
+        if settings.external_dir['PATH_HTC_EXTERNAL']:
+            dsettings = DatasetSettings(data_dir / "dataset_settings.json")
+        
+        if settings.external_dir is not None and (path := settings.external_dir/ 'data' /'dataset_settings.json').exists():
+                settings._dataset_settings = DatasetSettings(path)
+            elif self.image_dir is not None and (path := self.image_dir / "dataset_settings.json").exists():
+                self._dataset_settings = DatasetSettings(path)
+            else:
+                self._dataset_settings = DatasetSettings(path_or_data={})
+                parent_paths = list(self.image_dir.parents)
+                for p in parent_paths:
+                    if (path := p / "dataset_settings.json").exists():
+                        self._dataset_settings = DatasetSettings(path)
+                        break
+        
+        
+        DataPathClass = dsettings.data_path_class()
+        
+        
+        
+        
+        if DataPathClass is None:
+            # The user may provide a subpath to the dataset, e.g. DataPath.iterate(settings.data_dirs.sepsis_ICU / "calibrations")
+            # In this case, we still want to use the DataPathSepsisICU class which is specified in the dataset_settings.json file in the root data directory
+            dataset_entry = settings.datasets.find_entry(data_dir)
+            if dataset_entry is not None and data_dir.is_relative_to(dataset_entry["path_data"]):
+                # Try all subdirectories beginning from the most deep up to the data dir root (=dataset_entry["path_data"])
+                parts = list(data_dir.relative_to(dataset_entry["path_data"]).parts)
+                while True:
+                    dsettings = DatasetSettings(dataset_entry["path_data"] / Path(*parts) / "dataset_settings.json")
+                    DataPathClass = dsettings.data_path_class()
+                    if DataPathClass is not None:
+                        break
+
+                    if len(parts) == 0:
+                        break
+                    else:
+                        parts.pop()
+
+        if DataPathClass is None:
+            if not (data_dir / "dataset_settings.json").exists() and (data_dir / "data").exists():
+                settings.log.warning(
+                    f"No dataset_settings.json file found in the data directory {data_dir} but the subdirectory data"
+                    " exists in this directory. For the default datasets, please point data_dir to the data"
+                    " subdirectory of the dataset, e.g. ~/htc/2021_02_05_Tivita_multiorgan_semantic/data"
+                    " (=settings.data_dirs.semantic)"
+                )
+
+            from htc.tivita.DataPathTivita import DataPathTivita
+
+            DataPathClass = DataPathTivita
+
+        if annotation_name is not None:
+            annotation_name = list(annotation_name)
+            annotation_name_subclass = annotation_name[0] if len(annotation_name) == 1 else annotation_name
+        else:
+            annotation_name_subclass = None
+
+        yield from DataPathClass.iterate(data_dir, filters, annotation_name_subclass)
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    #my edited version, that I think should be thrown
+    
+    '''
+    def iterate(
+        data_dir: Path,
+        filters: Union[list[Callable[[Self], bool]], None] = None,
+        annotation_name: Union[str, list[str]] = None,
+        dataset_settings: Path = None #added  by lucas Steinberger to introduce explicitly defining dataset_settings.json location) -> Iterator[Self]:
+        
         Helper function to iterate over the folder structure of a dataset (e.g. subjects folder), yielding one image at a time.
 
         >>> paths = list(DataPath.iterate(settings.data_dirs.semantic))
@@ -1323,7 +1470,7 @@ class DataPath:
             
         if dataset_settings == None:
             dsettings = DatasetSettings(data_dir / "dataset_settings.json") #if un-specified by user
-            
+            specified = False
         else: #in the case where the user specifies an external path the a json
             specified = True #for use at the end of the function
             if not (isinstance(dataset_settings, str) or isinstance(dataset_settings, Path)):
@@ -1384,3 +1531,4 @@ class DataPath:
             #only works for classes designed to accept extra dataset_settings parameter. See iterate method of the the DataPath child classes. (e.g, DataPathAtlas)
         else:
             yield from DataPathClass.iterate(data_dir, filters, annotation_name_subclass)
+'''

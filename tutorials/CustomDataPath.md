@@ -67,8 +67,10 @@ It can be very useful to store information which apply to all your images at one
         "class_2": 1,
         "unlabeled": 255
     },
-    "last_valid_label_index": 1
-}
+    "last_valid_label_index": 1,
+    "label_ordering": {
+        "stomach": "01",
+    }
 ```
 Of course, you can add custom information as you wish.
 

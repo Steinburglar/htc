@@ -417,14 +417,14 @@ class DatasetAccessor:
         self.entry_field = entry_field
 
     def __getitem__(self, item: str) -> Union[Path, None]:
-        entry = self.datasets.get(item)
+        entry = self.datasets.get(item) #item is the str name of the dataset itself, not the entry fiels
         if entry is None:
             return None
         else:
             return entry[self.entry_field]
 
     def __getattr__(self, item: str) -> Union[Path, None]:
-        return self[item]
+        return self[item] #refers to __getitem__
 
     def __contains__(self, item: str) -> bool:
         return item in self.datasets

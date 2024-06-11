@@ -11,7 +11,7 @@
             "polygon#annotator2",
             "polygon#annotator3"
         ],
-        "data_spec": "/mnt/ssd_8tb/htc/src/tutorials/network_training/pigs_thoracic_2folds.json",
+        "data_spec": "/home/lucas/dkfz/htc/tutorials/network_training/pigs_thoracic_2folds.json",
         "epoch_size": 500,
         "merge_annotations": "union",
         "n_channels": 100,
@@ -45,11 +45,11 @@
         ]
     },
     "label_mapping": {
-        "heart": 0,
-        "lung": 1,
+        "gallbladder": 1,
+        "spleen": 0,
         "unlabeled": 100
     },
-    "lightning_class": "/mnt/ssd_8tb/htc/src/tutorials/network_training/LightningImageThoracic.py>LightningImageThoracic",
+    "lightning_class": "/home/lucas/dkfz/htc/tutorials/network_training/LightningImageThoracic.py>LightningImageThoracic",
     "model": {
         "architecture_kwargs": {
             "encoder_name": "efficientnet-b5",

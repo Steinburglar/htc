@@ -14,7 +14,9 @@ from typing_extensions import Self
 
 from htc.settings import settings
 from htc.tivita.DataPath import DataPath
+from htc.tivita.DataPathAtlas import DataPathAtlas
 from htc.utils.Config import Config
+
 
 
 class DataSpecification:
@@ -114,10 +116,15 @@ class DataSpecification:
                         DataPathClass = DataPath
                 else:
                     DataPathClass = DataPath
+                    
 
                 paths = []
+                dataset_settings = split_specs["dataset_settings"]
                 for image_name in split_specs["image_names"]:
-                    paths.append(DataPathClass.from_image_name(image_name))
+                    if DataPathClass == DataPathAtlas:
+                        paths.append(DataPathClass.from_image_name(image_name, Path(dataset_settings)))
+                    else:
+                        paths.append(DataPathClass.from_image_name(image_name))
 
                 if split_key.startswith("test"):
                     fold_data_test[split_key] = paths
