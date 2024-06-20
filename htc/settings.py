@@ -534,32 +534,25 @@ class Settings:
         
         
         Returns:
-            Union[MultiPath, None]: Multi Path object for external directories
+            Union[Dataset, None]: Multi Path object for external directories
         """
         if self._external is None:
             # Automatically add all externals which start with  PATH_HTC_EXTERNAL
-            self._external = Datasets()
             for env_name in os.environ.keys():
-                if not env_name.upper().startswith("PATH_HTC_EXTERNAL"):
-                    continue
-                if env_name in self._external:
-                    continue
+                if env_name.upper().startswith("PATH_HTC_EXTERNAL") and os.environ.get(env_name) != None:  
+                    print("made it past filter")
+                    self._external = Datasets()
+                    if env_name in self._external:
+                        continue
 
-                _, options = Datasets.parse_path_options(os.environ[env_name])
-                shortcut = options.get("shortcut", None)
+                    _, options = Datasets.parse_path_options(os.environ[env_name])
+                    shortcut = options.get("shortcut", None)
 
-                # Per default, the external directory is accessible via three names. For example, for PATH_HTC_EXTERNAL_gallbladder=/my/dataset_folder_name:
-                # - PATH_Tivita_HeiPorSPECTRAL
-                # - dataset_folder_name
-                # - HeiPorSPECTRAL
-                self._external.add_dir(
-                    env_name,
-                    shortcut=shortcut,
-                    additional_names=[
-                        env_name.removeprefix("PATH_HTC_EXTERNAL"),
-                        env_name.upper().removeprefix("PATH_HTC_EXTERNAL"),
-                    ],
-                )
+                    self._external.add_dir(
+                        env_name,
+                        shortcut=shortcut,
+                    )
+                    
 
         return self._external
 settings = Settings()

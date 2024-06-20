@@ -1,0 +1,79 @@
+{
+    "dataset_name": "HeiPorSPECTRAL",
+    "data_path_class": "htc.tivita.DataPathAtlas2>DataPathAtlas",
+    "shape": [
+        480,
+        640,
+        100
+    ],
+    "shape_names": [
+        "height",
+        "width",
+        "channels"
+    ],
+    "label_mapping": {
+        "stomach": 0,
+        "small_bowel": 1,
+        "colon": 2,
+        "liver": 3,
+        "gallbladder": 4,
+        "pancreas": 5,
+        "kidney": 6,
+        "spleen": 7,
+        "bladder": 8,
+        "omentum": 9,
+        "lung": 10,
+        "heart": 11,
+        "cartilage": 12,
+        "bone": 13,
+        "skin": 14,
+        "muscle": 15,
+        "peritoneum": 16,
+        "major_vein": 17,
+        "kidney_with_Gerotas_fascia": 18,
+        "bile_fluid": 19,
+        "overlap": 254,
+        "unlabeled": 255
+    },
+    "last_valid_label_index": 19,
+    "label_ordering": {
+        "stomach": "01",
+        "small_bowel": "02",
+        "colon": "03",
+        "liver": "04",
+        "gallbladder": "05",
+        "pancreas": "06",
+        "kidney": "07",
+        "spleen": "08",
+        "bladder": "09",
+        "omentum": "10",
+        "lung": "11",
+        "heart": "12",
+        "cartilage": "13",
+        "bone": "14",
+        "skin": "15",
+        "muscle": "16",
+        "peritoneum": "17",
+        "major_vein": "18",
+        "kidney_with_Gerotas_fascia": "19",
+        "bile_fluid": "20"
+    },
+    "annotator_mapping": {
+        "annotator1": "Marc Bressan",
+        "annotator2": "Alexander Studier-Fischer",
+        "annotator3": "Berkin Özdemir"
+    },
+    "subject_mapping": {
+        "P086": "P01",
+        "P087": "P02",
+        "P088": "P03",
+        "P089": "P04",
+        "P090": "P05",
+        "P091": "P06",
+        "P092": "P07",
+        "P093": "P08",
+        "P094": "P09",
+        "P095": "P10",
+        "P096": "P11"
+    }
+}

@@ -873,6 +873,7 @@ class DataPath:
 
         camera_meta_path = self.camera_meta_path()
         if not camera_meta_path.exists():
+            print("no camera metadata found")
             return None
         else:
             return read_meta_file(camera_meta_path)
@@ -895,6 +896,7 @@ class DataPath:
             return pat_meta_path[0]
         else:
             return None
+            
 
     def read_patient_meta(self) -> Union[dict, None]:
         """
@@ -1333,6 +1335,8 @@ class DataPath:
                 and len(set(p.meta("annotation_name")).intersection(annotation_name)) > 0
         )
         #first, see if externals exists and use that:
+        print("print statement in datapath.iterate:")
+        print(settings.external_dir)
         if settings.external_dir is not None and (path := settings.external_dir['PATH_HTC_EXTERNAL']['path_dataset']/ 'data' /'dataset_settings.json').exists():
             dsettings = DatasetSettings(path)
             print("external directory found")

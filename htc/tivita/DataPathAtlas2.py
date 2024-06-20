@@ -59,11 +59,21 @@ class DataPathAtlas(DataPath):
         #use super().__init__ to pass arguments to DataPath __init__. This way the DataPathAtlas object has all the same attributes that a DataPath Object would.
         super().__init__(image_dir, data_dir, intermediates_dir, dataset_settings, annotation_name_default)
         self.subject_name = self.image_dir.parent.name #helpful for folding by subject
+        grandparent_dir = self.image_dir.parent.parent.parent
+        self.subdataset_name = grandparent_dir.name
     
     def image_name(self) -> str: #most meta.feather files seem to be organized in this way
         name = f"{self.subject_name}#{self.timestamp}"
 
         return name
+    def contains_txt(self):
+        """
+        Method to check if the timestamp folder of the given path object contains a certain .txt file, which is included in only valid data captures
+        Useful for writing a filter function to filter out images missing this .txt file
+        Returns:
+            Bool: returns True if the file does exist in the timestamp folder, False otherwise
+        """
+        #write the syntax when you can look it up and know what the file looks like
     
     
     @staticmethod
@@ -93,10 +103,12 @@ class DataPathAtlas(DataPath):
             ext_exists = False
             intermediates_dir = settings.datasets.find_intermediates_dir(data_dir) #remove this line once i have set up external intermediates dir
         
-        if ext_exists:
+        if ext_exists and (external_dir /'data'/ "dataset_settings.json").exists():
             dataset_settings = DatasetSettings(external_dir /'data'/ "dataset_settings.json")
-        else:
+        elif (data_dir / "dataset_settings.json").exists():
             dataset_settings = DatasetSettings(data_dir / "dataset_settings.json")
+        else:
+            dataset_settings = None
         # Keep a list of used image folders in case a folder contains both a cube file and a tiv archive
         used_folders = set()
         for subject_dir in data_dir.iterdir():
