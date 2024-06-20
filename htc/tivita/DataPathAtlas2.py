@@ -59,8 +59,8 @@ class DataPathAtlas(DataPath):
         #use super().__init__ to pass arguments to DataPath __init__. This way the DataPathAtlas object has all the same attributes that a DataPath Object would.
         super().__init__(image_dir, data_dir, intermediates_dir, dataset_settings, annotation_name_default)
         self.subject_name = self.image_dir.parent.name #helpful for folding by subject
-        grandparent_dir = self.image_dir.parent.parent.parent
-        self.subdataset_name = grandparent_dir.name
+        self.grandparent_dir = self.image_dir.parent.parent.parent
+        self.subdataset_name = self.grandparent_dir.name
     
     def image_name(self) -> str: #most meta.feather files seem to be organized in this way
         name = f"{self.subject_name}#{self.timestamp}"
@@ -90,6 +90,15 @@ class DataPathAtlas(DataPath):
             filters: List of filters which can be used to alter the set of images returned by this function. Every filter receives a DataPath instance and the instance is only yielded when all filter return True for this path.
             annotation_name: Include only paths with this annotation name and use it as default in read_segmentation(). Must either be a lists of annotation names or as string in the form name1&name2 (which will automatically be converted to ['name1', 'name2']). If None, no default annotation name will be set and no images will be filtered by annotation name.
         """
+        if isinstance(data_dir, list):  # if given a list of data_dir paths
+            for data in data_dir:
+                yield from DataPathAtlas.iterate(data, filters, annotation_name)
+            return
+        
+        assert isinstance(data_dir, Path), "DataPathAtlas.iterate must be given a path to a 'data' folder, or a list of such paths"
+        
+        
+        
         # Settings of the dataset (shapes etc.) can be referenced by the DataPaths
         dataset_settings = None
         if filters == None:

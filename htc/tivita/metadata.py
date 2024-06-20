@@ -23,6 +23,8 @@ def generate_metadata_table(paths: Iterable[DataPath]) -> pd.DataFrame:
         paths: list of all image folders to scan.
 
     Returns: Table with the metadata (each image corresponds to a row).
+
+    will have a problem with duplicate images unless i get rid of them.
     """
     rows = []
 

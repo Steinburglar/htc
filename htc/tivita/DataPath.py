@@ -1154,7 +1154,9 @@ class DataPath:
                 return []
 
     @staticmethod
-    def _build_cache(local: bool) -> dict[str, Any]: #also problem line
+    def _build_cache(local: bool) -> dict[str, Any]: #this is terribly written right now but for now it works.
+        #problem is that it relies on a tivita existing and then goes through and overwrites every time with external. External never gets set to cache if there is not Tivita
+        #its designed to allow for multiple datasets in a global chache
         # We use a dict for the cache because it is much faster than a dataframe
         cache = {}
         #two possible entry variables, one external one normal
@@ -1176,7 +1178,7 @@ class DataPath:
 
                     dsettings = DatasetSettings(chosen_entry["path_data"] / "dataset_settings.json") #problem line!!!
                     
-                    df = pd.read_feather(table_path)
+                    df = pd.read_feather(table_path) #reads the whole feather table here
                     df["dsettings"] = dsettings #external
                     df["dataset_env_name"] = env_key
                     df["data_dir"] = entry["path_data"]
@@ -1321,6 +1323,12 @@ class DataPath:
 
         Returns: Generator with all path objects.
         """
+        if isinstance(data_dir, list):  # if given a list of data_dir paths
+            for data in data_dir:
+                yield from DataPath.iterate(data, filters, annotation_name)
+            return
+        
+        assert isinstance(data_dir, Path), "DataPath.iterate must be given a path to a 'data' folder, or a list of such paths"
         if filters is None:
             filters = []
 

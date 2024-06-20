@@ -129,15 +129,16 @@ class DatasetGenerator:
 
     def meta_table(self) -> None:
         """
+        segmentations should be generated before meta_table
         Creates and stores the meta table (e.g. `2021_02_05_Tivita_multiorgan_semantic@meta.feather`) for the dataset with all the available meta information per image (e.g. annotation names, camera meta). This table is necessary for the `DataPath.from_image_name()` functionality to work.
         """
         df = generate_metadata_table(track(self.paths, description="Collect metadata", refresh_per_second=1))
-        df["path"] = [str(p().relative_to(self.data_dir)) for p in self.paths]
+        df["path"] = [str(p().relative_to(self.data_dir)) for p in self.paths] # problem line!!!
 
         if len(self.dataset_paths) > 1:
             # Also store the path to the corresponding dataset_settings for each path (especially important for subdatasets)
             df["dataset_settings_path"] = [
-                str(p.dataset_settings.settings_path.relative_to(self.data_dir)) for p in self.paths
+                str(p.dataset_settings.settings_path.relative_to(self.data_dir)) for p in self.paths #not a problkem line? just sets dataset_settings path, which is in the right place
             ]
 
         names = []
