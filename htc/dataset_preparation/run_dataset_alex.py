@@ -271,7 +271,22 @@ class DatasetGeneratorAlex(DatasetGenerator):
         if self.include_csv:
             df.to_csv(self.tables_dir / f"{self.dsettings['dataset_name']}@meta.csv", index=False)
 
+    def view_organs(self) -> None:
+        mapping = LabelMapping.from_data_dir(self.data_dir)
+        missing_colors = []
+        for label in mapping.label_names():
+            if label not in settings.label_colors:
+                missing_colors.append(label)
 
+        assert (
+            len(missing_colors) == 0
+        ), f"The following labels do not have a color defined in settings.label_colors: {missing_colors}"
+
+        p_map(
+            partial(self._save_html, navigation_paths=self.paths),
+            self.paths,
+            task_name="View organs",
+        )
 
 
 
@@ -367,10 +382,10 @@ class DatasetGeneratorAlex(DatasetGenerator):
                 if hypergui_dir.is_dir() and hypergui_dir.name.startswith("_hypergui"):
                     subdata_hypergui_name = f"{p.subdataset_name}#{hypergui_dir.name}" #subdata_hypergui_name is a string in the format: "subdatasetname#_hyperGUI_N"
                     if subdata_hypergui_name not in hypergui_mapping:
-                       # settings.log.warning(
-                       #     f"Found an unknown hypergui folder: {hypergui_dir}. The folder will be ignored"
-                        #)
-                        #removed warning, since we expect to be skipping over hyperGUI folders
+                    # settings.log.warning(
+                    #     f"Found an unknown hypergui folder: {hypergui_dir}. The folder will be ignored"
+                    #)
+                    #removed warning, since we expect to be skipping over hyperGUI folders
                         continue
 
                     annotation_info = hypergui_mapping[subdata_hypergui_name]
@@ -432,3 +447,36 @@ class DatasetGeneratorAlex(DatasetGenerator):
 
         return label_mapping, last_valid_label_index
         
+        
+    @classmethod
+    def from_parser(cls, **kwargs) -> Self:
+        if "additional_arguments" not in kwargs:
+            kwargs["additional_arguments"] = {}
+
+        kwargs["additional_arguments"] |= {
+            "--subdata-hypergui-mapping": {
+                "type": Path,
+                "required": True,
+                "default": None,
+                "help": "Path to the subdata-hypergui-mapping JSON, which should consist of a dictionary of 'subdataname#_hypergui_N' : 'label' key-value pairs"
+            },
+        }
+
+        return super().from_parser(**kwargs)  
+        
+if __name__ == "__main__":
+    # The path argument for DatasetGenerator can be set to 2021_02_05_Tivita_multiorgan_masks dataset paths. Example:
+    # screen -S dataset_masks -d -m script -q -c "htc dataset_masks --input-path /mnt/E130-Projekte/Biophotonics/Data/2020_07_23_hyperspectral_MIC_organ_database/data/Catalogization_tissue_atlas" dataset_masks.log
+    external_path = settings.external_dir["dataset_path"]
+    generator = DatasetGeneratorAlex.from_parser(output_path=external_path)
+    # need ot set the subdata_hypergui_mapping. not sure where that happens
+    
+    
+    generator.run_safe(generator.dataset_settings)
+    #this calls hypergui_labe_mapping, which calls yield hypergui
+
+    p_map(generator.segmentations, generator.paths, num_cpus=2.0, task_name="Segmentation files")
+    generator.meta_table()
+    generator.median_spectra_table()
+    generator.preprocessed_files()
+    generator.view_organs()
