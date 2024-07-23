@@ -12,3 +12,4 @@ nbval
 line-profiler
 ninja
 cibuildwheel
+pybind11

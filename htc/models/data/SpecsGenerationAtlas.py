@@ -6,6 +6,8 @@ from abc import abstractmethod
 from pathlib import Path
 from sklearn.model_selection import train_test_split, KFold
 from typing import Callable, Union, Self
+from collections import defaultdict
+import pandas as pd
 
 from htc.models.data.DataSpecification import DataSpecification
 from htc.tivita.DataPathAtlas2 import DataPathAtlas
@@ -14,7 +16,7 @@ from htc import SpecsGeneration
 class SpecsGenerationAtlas(SpecsGeneration):
     
     def __init__(self,
-        data_dir: Path,
+        intermediates_dir: Path,
         filters: list[Callable[[Self], bool]] = None,
         annotation_name: Union[str, list[str]] = None,
         test_ratio: float = 0.2,
@@ -22,60 +24,79 @@ class SpecsGenerationAtlas(SpecsGeneration):
         seed: int = 42,
         name = "Atlas"
         ):
+        #should be built off of L1, Segmentatioons, or meta table, to avoid duplicates
+        #should also fold by subject
         # Unique name of the resulting specs file
         super().__init__(name = name)
-        self.data_dir = data_dir
+        self.intermediates_dir = intermediates_dir
         self.filters = filters
         self.annotation_name = annotation_name
         self.test_ratio = test_ratio
         self.n_folds = n_folds
         self.seed = seed
         
+    def group_by_subject(self, df):
+        subject_groups = defaultdict(list)
+        for _, row in df.iterrows():
+            image_name = row['image_name']
+            subject_name = image_name.split('#')[0]  # Assuming subject name is the first part of the image name
+            subject_groups[subject_name].append(image_name)
+        return subject_groups
+
+    
+    
+    
+    
     def generate_folds(self,
         test_ratio: float = 0.2,
-        n_folds: int = 5,
-        seed: int = 42
+        n_folds: int = 5
     ) -> list[dict]: 
         test_ratio = self.test_ratio
         n_folds = self.n_folds
         seed = self.seed
-        paths = list(DataPathAtlas.iterate(self.data_dir, filters = self.filters, annotation_name= self.annotation_name)) #add intermediates_dir when implemented
-        if test_ratio == 0:
-            paths_fold, paths_test = paths, []
+        table_path = list((self.intermediates_dir/ "tables").glob("*@meta.feather"))
+        assert len(table_path) > 0, "no meta.feather found in the specified intermediates directory"
+        assert len(table_path) == 1, f"More than one meta table found in the specified intermediates directory. Try regenerating the contents of your external directory with rundatasetalex.py, --regenerate"
+        table_path = table_path[0]
+        df = pd.read_feather(table_path)
+        subject_groups = self.group_by_subject(df)
+        subjects = list(subject_groups.keys())
+        print(subjects)       
+        if test_ratio == 0: #no testing data
+            train_subjects, test_subjects = subjects, []
         else:
-            paths_fold, paths_test = train_test_split(paths, test_size = test_ratio, )
-        imgs_test = [p.image_name() for p in paths_test] #creates list of image names in the test set
+            train_subjects, test_subjects = train_test_split(subjects, test_size=self.test_ratio, random_state=self.seed)
+        test_images = [img for sub in test_subjects for img in subject_groups[sub]] #creates list of image names in the test set
 
-        fold = KFold(n_splits=n_folds, shuffle=True, random_state = seed)
+        kf = KFold(n_splits=n_folds, shuffle=True, random_state = self.seed)
         split = 1
         data_specs = []
-        for val_indices, train_indices in fold.split(paths_fold):
+        for train_indices,val_indices,  in kf.split(train_subjects):
             #iterate through the folds, creating a fold_specs dictionary detailing each fold
-            paths_val = [paths_fold[i] for i in val_indices]
-            paths_train = [paths_fold[i] for i in train_indices]
-            imgs_val = [p.image_name() for p in paths_val]
-            imgs_train = [p.image_name() for p in paths_train]
+            train_subs = [train_subjects[i] for i in train_indices]
+            val_subs = [train_subjects[i] for i in val_indices]
+            train_images = [img for sub in train_subs for img in subject_groups[sub]]
+            val_images = [img for sub in val_subs for img in subject_groups[sub]]
             
             fold_specs = {
                 "fold_name": f"fold_{split}",
-                    
                 "train": {
-                    "image_names": imgs_train,
+                    "image_names": train_images,
                     "data_path_module": "htc.tivita.DataPathAtlas2",
                     "data_path_class": "DataPathAtlas",
                 },
                 "val": {
-                    "image_names": imgs_val,
+                    "image_names": val_images,
                     "data_path_module": "htc.tivita.DataPathAtlas2",
                     "data_path_class": "DataPathAtlas",
                 },
                 "test": {
-                    "image_names": imgs_test,
+                    "image_names": test_images,
                     "data_path_module": "htc.tivita.DataPathAtlas2",
                     "data_path_class": "DataPathAtlas",
                 },
             }
             data_specs.append(fold_specs)
-            split +=1
+            split += 1
             
         return data_specs #list of dictionaries, each of which specifies a test/validation fold

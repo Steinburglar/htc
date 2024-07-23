@@ -302,6 +302,7 @@ class Settings:
             "vesic_gland": "#00469C",
             "Exterior": "#00000000",  # Unlabeled parts in MITK
             "network_unsure": "#AAAAAA",
+            "uro_conduit" : "#228B22"
         }
 
         self.known_envs = (
@@ -540,7 +541,6 @@ class Settings:
             # Automatically add all externals which start with  PATH_HTC_EXTERNAL
             for env_name in os.environ.keys():
                 if env_name.upper().startswith("PATH_HTC_EXTERNAL") and os.environ.get(env_name) != None:  
-                    print("made it past filter")
                     self._external = Datasets()
                     if env_name in self._external:
                         continue

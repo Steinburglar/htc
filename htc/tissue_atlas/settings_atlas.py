@@ -32,6 +32,7 @@ class SettingsAtlas:
             "omentum": 17,
             "bladder": 18,
             "spleen": 19,
+            "uro_conduit":20,
             "unlabeled": settings.label_index_thresh,
             "overlap": settings.label_index_thresh + 1,
             "organic_artifact": settings.label_index_thresh + 2,

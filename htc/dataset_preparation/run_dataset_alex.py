@@ -3,7 +3,8 @@ import copy
 import itertools
 import json
 import re
-from functools import cached_property
+from functools import cached_property, partial
+from urllib.parse import quote_plus
 from multiprocessing import Process
 from pathlib import Path
 from typing import Any, Callable, Union
@@ -11,13 +12,13 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 from rich.progress import track
-from typing_extensions import Self, Generator, list, dict, tuple
+from typing_extensions import Self, Generator
 from htc.tivita.DataPathAtlas2 import DataPathAtlas
 from htc.data_processing.run_l1_normalization import L1Normalization
 from htc.data_processing.run_median_spectra import MedianSpectra
 from htc.data_processing.run_parameter_images import ParameterImages
 from htc.data_processing.run_raw16 import Raw16
-from htc.data_processing.run_rgb_sensor_aligned import RGBSensorAligned
+#from htc.data_processing.run_rgb_sensor_aligned import RGBSensorAligned
 from htc.settings import settings
 from htc.tivita.DataPath import DataPath
 from htc.dataset_preparation.DatasetGenerator import DatasetGenerator
@@ -25,14 +26,18 @@ from htc.tivita.DatasetSettings import DatasetSettings
 from htc.tivita.metadata import generate_metadata_table
 from htc.utils.AdvancedJSONEncoder import AdvancedJSONEncoder
 from htc.utils.general import clear_directory, safe_copy
-from htc.utils.mitk.mitk_masks import nrrd_mask
+#from htc.utils.mitk.mitk_masks import nrrd_mask
 from htc.utils.parallel import p_map
 from htc.utils.paths import filter_min_labels
 from htc.utils.LabelMapping import LabelMapping
 from htc.utils.blosc_compression import compress_file
 
+from htc.utils.helper_functions import sort_labels
+from htc.utils.visualization import compress_html, create_overview_document
+
+
 class DatasetGeneratorAlex(DatasetGenerator):
-    def __init__(self, output_path: Path, input_paths: list[Path] = None, paths: list[DataPath] | None = None, regenerate: bool = False, include_csv: bool = False):
+    def __init__(self, output_path: Path, subdata_hypergui_mapping: Path = None, input_path: Union[list[Path], Path] = None, paths: list[DataPath] | None = None, regenerate: bool = False, include_csv: bool = False):
     
         """
         Class to process data from Alex in its original form. 
@@ -46,17 +51,17 @@ class DatasetGeneratorAlex(DatasetGenerator):
 
         Args:
             output_path: Path where the intermediates and dataset_settings should be stored (data and intermediates subfolder will be created at this location).
-            input_paths: list of Paths to the original dataset from the clinicians (e.g. folders with the name `Cat_*`).
+            input_path: LIST of Paths to the original dataset from the clinicians (e.g. folders with the name `Cat_*`).
             paths: Explicit list of paths which should be considered in the methods. If None, all found images in the output path will be used (usually what you want).
             regenerate: If True, will delete existing intermediate files before generating new ones.
             include_csv: If True, will save tables additionally as CSV files.
         """
-        self.input_paths = input_paths
+        self.input_path = input_path
         self.output_path = output_path
         self.dataset_name = output_path.name
         self.include_csv = include_csv
         self._paths = paths if paths is not None else None
-        self.hypergui_subdata_mapping = None #need to add this in
+        self.subdata_hypergui_mapping = json.loads(subdata_hypergui_mapping.read_text()) #we want to save the dictionary as the instance variable
         self.data_dir = self.output_path / "data"
         if not self.data_dir.exists():
             self.data_dir.mkdir(exist_ok=True, parents=True)
@@ -65,9 +70,14 @@ class DatasetGeneratorAlex(DatasetGenerator):
                 "There is a file named data in the output_path. Please remove the file, as the script needs to create a"
                 " data directory."
             )
-
+        ## fix this here
         if self.input_path is not None:
-            assert self.input_path.is_dir(), "The input_path does not point towards a directory."
+            if isinstance(self.input_path, Path):
+                assert self.input_path.is_dir(), "The input_path does not point towards a directory."
+                self.input_path = [self.input_path]
+            elif isinstance(self.input_path, list):
+                assert all(p.is_dir() for p in input_path), "Not every item in the provided input_path list is an appropriate directory"
+            
 
         self.intermediates_dir = self.output_path / "intermediates"
         if not self.intermediates_dir.exists():
@@ -84,6 +94,7 @@ class DatasetGeneratorAlex(DatasetGenerator):
 
         self.missing_binaries = None
         self.missing_coordinates = None
+        self.overview_kwargs = {}
         
     
     
@@ -100,9 +111,11 @@ class DatasetGeneratorAlex(DatasetGenerator):
         Therefore, the functionaly of this method can be recontructed, so you have multiple options.
         """
         dict = {}
-        data_subdirectories = [path / 'data' for path in self.input_paths]
+        data_subdirectories = [path / 'data' for path in self.input_path]
+        filter_txt = lambda p: p.contains_txt() # only process patchs with a labelling_001.txt file
+        filters = [filter_txt] #list of callable filter functions, can be a variety of things
         for data_dir in data_subdirectories:
-            paths = list(DataPathAtlas.iterate(data_dir))
+            paths = list(DataPathAtlas.iterate(data_dir, filters=filters))
             name0 = paths[0].subdataset_name
             assert all(path.subdataset_name == name0 for path in paths), "Not all items are from the same subdataset"
             dict[name0] = paths #set the ist of paths to
@@ -110,7 +123,7 @@ class DatasetGeneratorAlex(DatasetGenerator):
         return dict
         
     
-    def compile_image_dict(self):
+    def compile_image_dict(self) -> dict[str, list[Path]]:
         """
         method to take the dataset_paths dictionary, and produce a dictionary with the unique image names as keys,
         and the Paths leading to that image name as values. This is intended as a tool to deal with duplicates in the larger dataset, particular ones
@@ -123,7 +136,7 @@ class DatasetGeneratorAlex(DatasetGenerator):
         images_dict = {}
         for path in self.paths:
             name = path.image_name()
-            images_dict.setdefault(name, []).append(name) #check to see if a list has already been created. if not, initialize it
+            images_dict.setdefault(name, []).append(path) #check to see if a list has already been created. if not, initialize it
         return images_dict
     
     def subdatasets(self):
@@ -140,7 +153,6 @@ class DatasetGeneratorAlex(DatasetGenerator):
             name = path.subdataset_name #here, name is the name of the subdataset folder
             subdatasets.setdefault(name, []).append(path)#appends to list for that subdataset (createsif it does not yet exist)
         return subdatasets
-    
     
     def dataset_settings(self) -> None:
         label_mapping, last_valid_label_index = self._hypergui_label_mapping()
@@ -162,11 +174,16 @@ class DatasetGeneratorAlex(DatasetGenerator):
             },
         }
 
+        with (self.data_dir / "dataset_settings.json").open("w") as f:
+            json.dump(dataset_settings, f, cls=AdvancedJSONEncoder, indent=4, ensure_ascii=False)
+
+
 
     def segmentations(self, paths):
         """
         method to iterate through all the hyperGUI folders in all the DataPaths available (across all subdatasets),
         and compress them into a blosc dictionary in the standard format of the intermediates directory.
+        segmentations gets called exactly once for each unique image
 
         Args:
             paths: list of paths, all of which must correspond to the same image. 
@@ -192,24 +209,33 @@ class DatasetGeneratorAlex(DatasetGenerator):
             assert 1 <= len(np.unique(mask)) <= 2, f"Invalid number of values in the mask {f}"
             assert mask.shape == self.dsettings["spatial_shape"], f"The mask has the wrong shape: {mask.shape}"
 
-            annotation_name = f"{annotation_type}#{annotator}"
+            annotation_name = f"{annotation_type}#{annotator}" #dont add label_name to this, leave as is
+            #annotation_name is used to group final segmentation arrays by annotator, and should NOT be used to sort by label: all the labels should show up in the same array. 
 
             if annotation_name not in annotations:
                 annotations[annotation_name] = np.full(
                     self.dsettings["spatial_shape"], label_mapping.name_to_index("unlabeled"), dtype=np.uint8
                 )
 
-            if not np.all(annotations[annotation_name][mask] == label_mapping.name_to_index("unlabeled")):
+            if not np.all(annotations[annotation_name][mask] == label_mapping.name_to_index("unlabeled")): #applies mask being considered over the previously existing annotations array. 
+                #if parts of polygon in the new mask being considered (mask) overlap with parts of the annotation array that are NOT unlabeled, throws warning
                 labels = [label_mapping.index_to_name(l) for l in np.unique(annotations[annotation_name][mask])]
                 labels = [l for l in labels if l != "unlabeled"]
 
                 settings.log.error(
                     "Overlapping pixel detected for the image"
-                    f" {path.image_name()} (annotation_name={annotation_name}, new label={label_name}, existing"
-                    f" labels={labels}). The annotation for the new label {label_name} will be ignored!"
+                    f" {dictionary['timestamp']} (annotation_name={annotation_name}, new label={label_name}, existing"
+                    f" labels={labels}). Overlapping pixels will be replaced with 'overlap' label."
                 )
+
+                overlap_index = label_mapping.name_to_index("overlap")
+
+                # Replace overlapping pixels with 'overlap' label
+                overlap_mask = mask & (annotations[annotation_name] != label_mapping.name_to_index("unlabeled"))
+                annotations[annotation_name][overlap_mask] = overlap_index
+
             else:
-                annotations[annotation_name][mask] = label_mapping.name_to_index(label_name)
+                annotations[annotation_name][mask] = label_mapping.name_to_index(label_name) #if there are now overlaps, updates the annoptation array inplace to include the new polygon with appropriate label index from mask
             
             """
             elif f.suffix == ".nrrd":
@@ -248,7 +274,7 @@ class DatasetGeneratorAlex(DatasetGenerator):
         Creates and stores the meta table (e.g. `2021_02_05_Tivita_multiorgan_semantic@meta.feather`) for the dataset with all the available meta information per image (e.g. annotation names, camera meta). This table is necessary for the `DataPath.from_image_name()` functionality to work.
         """
         df = generate_metadata_table(track(self.paths, description="Collect metadata", refresh_per_second=1))
-        df["path"] = [str(p.grandparent/'data') for p in self.paths] # problem line!!! maybe fixed with grandparent
+        df["path"] = [str(p().relative_to(p.grandparent_dir/'data')) for p in self.paths] # problem line!!! maybe fixed with grandparent
 
         if len(self.dataset_paths) > 1:
             # Also store the path to the corresponding dataset_settings for each path (especially important for subdatasets)
@@ -264,7 +290,32 @@ class DatasetGeneratorAlex(DatasetGenerator):
             else:
                 names.append(None)
         df["annotation_name"] = names
+        def clean_update_annotation_names(df: pd.DataFrame) -> pd.DataFrame:
+            """
+            Updates the annotation_name column by combining annotation names for each image.
 
+            Args:
+                df (pd.DataFrame): The initial metadata DataFrame.
+
+            Returns:
+                pd.DataFrame: The updated DataFrame with combined annotation names.
+            """
+            # Group by 'image_name' and combine annotation names
+            annotation_map = df.groupby('image_name')['annotation_name'].apply(
+                lambda x: list(itertools.chain.from_iterable(y for y in x if y is not None))
+            ).to_dict()
+
+            # Remove duplicates and convert lists back to strings
+            for image_name, annotations in annotation_map.items():
+                annotation_map[image_name] = list(set(annotations))
+
+            # Update the 'annotation_name' column in the original DataFrame
+            df['annotation_name'] = df['image_name'].map(annotation_map)
+            df_cleaned = df.drop_duplicates(subset='image_name', keep='first')
+            return df_cleaned
+        
+
+        df = clean_update_annotation_names(df)
         df = df.reset_index(drop=True)
         df.to_feather(self.tables_dir / f"{self.dsettings['dataset_name']}@meta.feather")
 
@@ -289,6 +340,26 @@ class DatasetGeneratorAlex(DatasetGenerator):
         )
 
 
+    def _save_html(self, path: DataPath, navigation_paths: list[DataPath]) -> None:
+        def create_navigation_link(label_name: str, label_order: str, image_path: DataPath) -> str:
+            return f"../{label_order}_{label_name}/{quote_plus(image_path.image_name())}.html"
+
+        html = create_overview_document(
+            path,
+            navigation_paths=navigation_paths,
+            navigation_link_callback=create_navigation_link,
+            **self.overview_kwargs,
+        )
+        html = compress_html(file=None, fig_or_html=html)
+
+        for label_name in path.annotated_labels(annotation_name="all"):
+            target_dir = (
+                self.intermediates_dir / "view_organs" / f"{self.dsettings['label_ordering'][label_name]}_{label_name}"
+            )
+            target_dir.mkdir(parents=True, exist_ok=True)
+
+            (target_dir / f"{path.image_name()}.html").write_text(html)
+
 
     def _yield_hypergui_data(
         self,
@@ -300,7 +371,7 @@ class DatasetGeneratorAlex(DatasetGenerator):
 
         Args:
             paths: List of image paths which all show the same image but annotate different parts in the image (since an image may be stored more than once in the original dataset).
-            hypergui_mapping: Information for every _hypergui_N folder. For each folder, a dictionary with the keys `annotation_type` (e.g. polygon or circle) and `annotator` (e.g. annotator1) must be provided.
+            hypergui_mapping: Information for every _hypergui_N folder. For each folder, a dictionary with the keys `annotation_type` (e.g. polygon or circle) and `annotator` (e.g. annotator1) must be provided. a "label" should also be provided
 
         Yields:
             dict: A dictionary containing the processed data for each path, including masks, meta labels, and any relevant annotations.
@@ -429,7 +500,7 @@ class DatasetGeneratorAlex(DatasetGenerator):
         # Get all labels in the dataset
         all_labels = set()
         
-        for image_name, paths in enumerate(self.compile_image_dict()):
+        for image_name, paths in (self.compile_image_dict()).items():
             for dictionary in self._yield_hypergui_data(paths, self.subdata_hypergui_mapping):
                 label = dictionary['label'] 
                 all_labels.add(label)
@@ -448,35 +519,23 @@ class DatasetGeneratorAlex(DatasetGenerator):
         return label_mapping, last_valid_label_index
         
         
-    @classmethod
-    def from_parser(cls, **kwargs) -> Self:
-        if "additional_arguments" not in kwargs:
-            kwargs["additional_arguments"] = {}
-
-        kwargs["additional_arguments"] |= {
-            "--subdata-hypergui-mapping": {
-                "type": Path,
-                "required": True,
-                "default": None,
-                "help": "Path to the subdata-hypergui-mapping JSON, which should consist of a dictionary of 'subdataname#_hypergui_N' : 'label' key-value pairs"
-            },
-        }
-
-        return super().from_parser(**kwargs)  
         
 if __name__ == "__main__":
     # The path argument for DatasetGenerator can be set to 2021_02_05_Tivita_multiorgan_masks dataset paths. Example:
     # screen -S dataset_masks -d -m script -q -c "htc dataset_masks --input-path /mnt/E130-Projekte/Biophotonics/Data/2020_07_23_hyperspectral_MIC_organ_database/data/Catalogization_tissue_atlas" dataset_masks.log
-    external_path = settings.external_dir["dataset_path"]
-    generator = DatasetGeneratorAlex.from_parser(output_path=external_path)
+    external_path = external = settings.external_dir['PATH_HTC_EXTERNAL']['path_dataset']
+    generator = DatasetGeneratorAlex.from_parser(output_path=external_path, subdata_hypergui_mapping = external_path / 'subdata-hypergui-mapping.json')
     # need ot set the subdata_hypergui_mapping. not sure where that happens
     
     
     generator.run_safe(generator.dataset_settings)
+    
     #this calls hypergui_labe_mapping, which calls yield hypergui
-
-    p_map(generator.segmentations, generator.paths, num_cpus=2.0, task_name="Segmentation files")
+    
+    paths_dict = generator.compile_image_dict() #dictionary where each value is a list of paths sharing the same image.
+    list_of_paths_lists = list(paths_dict.values())
+    p_map(generator.segmentations, list_of_paths_lists, num_cpus=2.0, task_name="Segmentation files") #the second argument should be a list of lists: a list of paths lists, each of which is the 
     generator.meta_table()
-    generator.median_spectra_table()
-    generator.preprocessed_files()
-    generator.view_organs()
+    generator.median_spectra_table() #cant do because we dont have the proprietary function
+    generator.preprocessed_files()   #also has a proprietary component
+    #generator.view_organs()

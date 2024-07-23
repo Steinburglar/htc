@@ -73,7 +73,10 @@ class DataPathAtlas(DataPath):
         Returns:
             Bool: returns True if the file does exist in the timestamp folder, False otherwise
         """
-        #write the syntax when you can look it up and know what the file looks like
+        file_path = self.image_dir / '_labelling_001.txt'
+        return file_path.is_file()
+        
+        ##write the syntax when you can look it up and know what the file looks like
     
     
     @staticmethod

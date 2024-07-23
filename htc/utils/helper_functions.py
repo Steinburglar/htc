@@ -183,11 +183,13 @@ def median_table(
 
         # Find the default annotation_name
         if annotation_name is None:
-            data_dir = settings.data_dirs[dataset_name]
+            data_dir = settings.intermediates_dirs.external/ 'data'
             if data_dir is not None:
                 dsettings = DatasetSettings(data_dir)
                 annotation_name = dsettings.get("annotation_name_default")
-
+        #
+        annotation_name = None
+        #
         if annotation_name is None or annotation_name == "all":
             annotation_name = list(tables[table_identifier].keys())
 
@@ -202,7 +204,6 @@ def median_table(
             else:
                 assert len(annotation_name) == 1
             df.append(df_a)
-
         needs_sorting = len(df) > 1
         df = pd.concat(df)
 
@@ -212,15 +213,17 @@ def median_table(
             if len(df) > 0:
                 label_indices = torch.from_numpy(df["label_index"].values)
                 assert (
-                    settings.data_dirs[dataset_name] is not None
+                    settings.external_dir.external['path_data'] is not None
                 ), f"Cannot find the path to the dataset {dataset_name} but this is required for remapping the labels"
-                original_mapping = LabelMapping.from_data_dir(settings.data_dirs[dataset_name])
+                original_mapping = LabelMapping.from_data_dir(settings.external_dir.external['path_data'])
                 label_mapping.map_tensor(label_indices, original_mapping)
                 df["label_index_mapped"] = label_indices
                 df["label_name_mapped"] = [label_mapping.index_to_name(i) for i in df["label_index_mapped"]]
 
         if needs_sorting:
             df = sort_labels(df, dataset_name=dataset_name)
+
+        
 
         return df.reset_index(drop=True)
 
@@ -267,6 +270,7 @@ def median_table(
     if paths is not None:
         assert image_names is None, "image_names must be None if paths is specified"
         image_names_only, annotation_images, image_names_ordering = parse_paths(paths)
+        
     elif image_names is not None:
         assert paths is None, "paths must be None if image_names is specified"
         # Theoretically, we could also parse the image names to paths and only use the paths function
@@ -284,8 +288,8 @@ def median_table(
     remaining_images = set(image_names_only)
     considered_datasets = set()
     for _dataset_name, _table_name in tables.keys():
-        if _table_name != table_name:
-            continue
+        #if _table_name != table_name:
+        #    continue
 
         df = read_table(_dataset_name, _table_name, annotation_name)
         df = df.query("image_name in @remaining_images")
@@ -304,15 +308,16 @@ def median_table(
         remaining_images = {name: set(images) for name, images in annotation_images.items()}
         is_done = False
         for _dataset_name, _table_name in tables.keys():
-            if _table_name != table_name:
-                continue
+            #if _table_name != table_name:
+                #continue
             if is_done:
                 break
 
             for table_annotation_name in tables[(_dataset_name, _table_name)].keys():
-                if table_annotation_name not in annotation_images.keys():
+                #if table_annotation_name not in annotation_images.keys():
                     # If the table does not contain any of the requested annotations, we can skip it
-                    continue
+                    #continue
+                #funky stuff with annotation imagews, to be looked into
 
                 df = read_table(_dataset_name, _table_name, table_annotation_name)
                 df = df.query("image_name in @remaining_images[@table_annotation_name]")

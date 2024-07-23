@@ -7,6 +7,7 @@ from pathlib import Path
 
 from setuptools import find_namespace_packages, setup
 from torch.utils import cpp_extension
+from pybind11 import get_include as pybind11_get_include
 
 
 def read_file(path: Path) -> str:
@@ -72,7 +73,7 @@ source_files = [str(f.relative_to(repo_root)) for f in source_files]
 if os.name == "nt":
     compiler_flags = ["/O2", "/std:c++20"]
 else:
-    compiler_flags = ["-O3", "-std=c++2a"]
+    compiler_flags = ["-O3", "-std=c++20"]
 
 setup(
     name="imsy-htc",
@@ -124,6 +125,10 @@ setup(
         cpp_extension.CppExtension(
             name="htc._cpp",
             sources=source_files,
+            include_dirs=[
+                pybind11_get_include(),
+                pybind11_get_include(user=True)
+            ],
             extra_compile_args=compiler_flags,
         )
     ],

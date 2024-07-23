@@ -28,7 +28,7 @@ from htc.utils.type_from_string import type_from_string
 class LightningImage(HTCLightning):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
+        print('constructed lightning class')
         name = self.config["model/model_name"]
         if name is not None:
             if ">" in name:
@@ -53,7 +53,9 @@ class LightningImage(HTCLightning):
         if hasattr(self.dice_loss, "class_weight"):
             # MONAI >=1.3.0 uses a class weight buffer which breaks loading of old checkpoints
             # Since we have our own class weighting anyway, we simple remove the buffer
-            del self.dice_loss.class_weight
+            self.dice_loss.class_weight = None
+            #was formerly del self.dice_loss.class_weight = None
+            #changed after seeing monai error, but maybe the change also screws things up
 
         if "optimization/spx_loss_weight" in self.config:
             assert (

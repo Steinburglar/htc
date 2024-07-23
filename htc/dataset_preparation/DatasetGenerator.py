@@ -18,14 +18,14 @@ from htc.data_processing.run_l1_normalization import L1Normalization
 from htc.data_processing.run_median_spectra import MedianSpectra
 from htc.data_processing.run_parameter_images import ParameterImages
 from htc.data_processing.run_raw16 import Raw16
-from htc.data_processing.run_rgb_sensor_aligned import RGBSensorAligned
+#from htc.data_processing.run_rgb_sensor_aligned import RGBSensorAligned
 from htc.settings import settings
 from htc.tivita.DataPath import DataPath
 from htc.tivita.DatasetSettings import DatasetSettings
 from htc.tivita.metadata import generate_metadata_table
 from htc.utils.AdvancedJSONEncoder import AdvancedJSONEncoder
 from htc.utils.general import clear_directory, safe_copy
-from htc.utils.mitk.mitk_masks import nrrd_mask
+#from htc.utils.mitk.mitk_masks import nrrd_mask
 from htc.utils.parallel import p_map
 from htc.utils.paths import filter_min_labels
 
@@ -304,16 +304,17 @@ class DatasetGenerator:
             L1Normalization(
                 paths,
                 file_type="blosc",
-                output_dir=self.intermediates_dir / "preprocessing",
+                output_dir=self.intermediates_dir / "preprocessing" ,
                 regenerate=self.regenerate,
-                folder_name=f"L1{folder_suffix}",
+                #folder_name=f"L1{folder_suffix}",
             ).run()
+        """
             ParameterImages(
                 paths,
                 file_type="blosc",
                 output_dir=self.intermediates_dir / "preprocessing",
                 regenerate=self.regenerate,
-                folder_name=f"parameter_images{folder_suffix}",
+                #folder_name=f"parameter_images{folder_suffix}",
             ).run()
 
             if include_raw16:
@@ -324,6 +325,7 @@ class DatasetGenerator:
                     regenerate=self.regenerate,
                     folder_name=f"raw16{folder_suffix}",
                 ).run()
+        """
 
     def aligned_rgb_sensor(self) -> None:
         RGBSensorAligned(
@@ -698,6 +700,7 @@ class DatasetGenerator:
         parser.add_argument(
             "--input-path",
             type=Path,
+            nargs='+',
             required=False,
             help="Path to the original dataset from the clinicians (e.g. folders with the name `Cat_*`).",
         )

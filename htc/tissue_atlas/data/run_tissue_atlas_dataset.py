@@ -32,7 +32,7 @@ class SpecsGenerationTissueAtlas(SpecsGeneration):
     def generate_folds(self) -> list[dict]:
         data_specs = []
 
-        train_pigs = sorted(set(self.df["subject_name"].unique()) - set(self.test_pigs))
+        train_pigs = sorted(set(self.df["subject_name"].unique()) - set(self.test_pigs)) #here is where it avoids duplicates
         imgs_test = self.df.query("subject_name in @self.test_pigs")["image_name"].unique().tolist()
 
         for subject_name in train_pigs:
