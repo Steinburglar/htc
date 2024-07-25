@@ -196,10 +196,11 @@ class DatasetGeneratorAlex(DatasetGenerator):
 
         annotations = {}
         for dictionary in self._yield_hypergui_data(paths, self.subdata_hypergui_mapping):
-            timestamp = dictionary['timestamp']
+            timestamp = dictionary["timestamp"]
             annotation_type = dictionary['annotation_type']
             annotator = dictionary['annotator']
             label_name = dictionary['label']
+            assert all(timestamp == path.timestamp for path in paths)
             assert label_name in label_mapping, f"No label_index defined for the label {label_name}"
             # assert timestamp == path.timestamp
 
@@ -237,30 +238,29 @@ class DatasetGeneratorAlex(DatasetGenerator):
             else:
                 annotations[annotation_name][mask] = label_mapping.name_to_index(label_name) #if there are now overlaps, updates the annoptation array inplace to include the new polygon with appropriate label index from mask
             
-            """
-            elif f.suffix == ".nrrd":
-                timestamp, annotation_type, annotator = f.stem.split("#")
-                assert timestamp == path.timestamp
-
-                mitk_data = nrrd_mask(f)
-
-                assert set(mitk_data["label_mapping"].label_names()).issubset(label_mapping.label_names()), (
-                    f"The file {f} contains the labels"
+        for dictionary in yield_mitk_data: #now add annotations in the form of mitk masks:
+            timestamp = dictionary["timestamp"]
+            annotation_type = dictionary['annotation_type']
+            annotator = dictionary['annotator']
+            assert all(timestamp == path.timestamp for path in paths)
+            annotation_name = f"{annotation_type}#{annotator}"
+            mitk_data = dictionary[mitk_data]
+            assert set(mitk_data["label_mapping"].label_names()).issubset(label_mapping.label_names()), (
+                    f"The file {annotation_name} contains the labels"
                     f" {set(mitk_data['label_mapping'].label_names()) - set(label_mapping.label_names())} that are not"
                     " defined in the label mapping of the dataset"
                 )
-                mask = label_mapping.map_tensor(mitk_data["mask"], mitk_data["label_mapping"])
+            mask = label_mapping.map_tensor(mitk_data["mask"], mitk_data["label_mapping"])
 
-                if mask.ndim == 3:  # for multi layer nrrd files
-                    layer_to_type = path.dataset_settings[f"layer_to_type{mask.shape[0]}"]
+            if mask.ndim == 3:  # for multi layer nrrd files
+                    layer_to_type = paths[0].dataset_settings[f"layer_to_type{mask.shape[0]}"]
 
                     for layer in range(mask.shape[0]):
                         annotation_name = f"{layer_to_type[str(layer)]}#{annotator}"
                         annotations[annotation_name] = mask[layer, :, :]
-                else:
-                    annotation_name = f"{annotation_type}#{annotator}"
-                    annotations[annotation_name] = mask
-                """
+            else:
+                annotation_name = f"{annotation_type}#{annotator}"
+                annotations[annotation_name] = mask
         if len(annotations) > 0:
             compress_file(target_dir / f"{paths[0].image_name()}.blosc", annotations)
 
