@@ -3,6 +3,7 @@ import copy
 import itertools
 import json
 import re
+import shutil
 from functools import cached_property, partial
 from urllib.parse import quote_plus
 from multiprocessing import Process
@@ -26,7 +27,7 @@ from htc.tivita.DatasetSettings import DatasetSettings
 from htc.tivita.metadata import generate_metadata_table
 from htc.utils.AdvancedJSONEncoder import AdvancedJSONEncoder
 from htc.utils.general import clear_directory, safe_copy
-#from htc.utils.mitk.mitk_masks import nrrd_mask
+from htc.utils.mitk.mitk_masks import nrrd_mask
 from htc.utils.parallel import p_map
 from htc.utils.paths import filter_min_labels
 from htc.utils.LabelMapping import LabelMapping
@@ -36,7 +37,7 @@ from htc.utils.helper_functions import sort_labels
 from htc.utils.visualization import compress_html, create_overview_document
 
 
-class DatasetGeneratorAlex(DatasetGenerator):
+class DatasetGeneratorUrology(DatasetGenerator):
     def __init__(self, output_path: Path, subdata_hypergui_mapping: Path = None, input_path: Union[list[Path], Path] = None, paths: list[DataPath] | None = None, regenerate: bool = False, include_csv: bool = False):
     
         """
@@ -61,7 +62,10 @@ class DatasetGeneratorAlex(DatasetGenerator):
         self.dataset_name = output_path.name
         self.include_csv = include_csv
         self._paths = paths if paths is not None else None
-        self.subdata_hypergui_mapping = json.loads(subdata_hypergui_mapping.read_text()) #we want to save the dictionary as the instance variable
+        if subdata_hypergui_mapping is not None:
+            self.subdata_hypergui_mapping = json.loads(subdata_hypergui_mapping.read_text()) #we want to save the dictionary as the instance variable
+        else:
+            self.subdata_hypergui_mapping = None
         self.data_dir = self.output_path / "data"
         if not self.data_dir.exists():
             self.data_dir.mkdir(exist_ok=True, parents=True)
@@ -95,6 +99,8 @@ class DatasetGeneratorAlex(DatasetGenerator):
         self.missing_binaries = None
         self.missing_coordinates = None
         self.overview_kwargs = {}
+        self.copied_mitk=False #flag to see if the mitk foiles have been copied over yet. trips to true when copy_mitk_data is run.
+        #important if you want to filter only images with mitk images (annotations)
         
     
     
@@ -155,11 +161,11 @@ class DatasetGeneratorAlex(DatasetGenerator):
         return subdatasets
     
     def dataset_settings(self) -> None:
-        label_mapping, last_valid_label_index = self._hypergui_label_mapping()
+        label_mapping, last_valid_label_index = self._hypergui_mitk_label_mapping()
 
         dataset_settings = {
             "dataset_name": "2021_02_05_Tivita_multiorgan_masks",
-            "data_path_class": "htc.tivita.DataPathMultiorgan>DataPathMultiorgan",
+            "data_path_class": "htc.tivita.DataPathAtlas2>DataPathAtlas",
             "shape": [480, 640, 100],
             "shape_names": ["height", "width", "channels"],
             "label_mapping": label_mapping,
@@ -238,19 +244,18 @@ class DatasetGeneratorAlex(DatasetGenerator):
             else:
                 annotations[annotation_name][mask] = label_mapping.name_to_index(label_name) #if there are now overlaps, updates the annoptation array inplace to include the new polygon with appropriate label index from mask
             
-        for dictionary in yield_mitk_data: #now add annotations in the form of mitk masks:
+        for dictionary in self._yield_mitk_data(paths): #now add annotations in the form of mitk masks:
             timestamp = dictionary["timestamp"]
             annotation_type = dictionary['annotation_type']
             annotator = dictionary['annotator']
             assert all(timestamp == path.timestamp for path in paths)
             annotation_name = f"{annotation_type}#{annotator}"
-            mitk_data = dictionary[mitk_data]
-            assert set(mitk_data["label_mapping"].label_names()).issubset(label_mapping.label_names()), (
+            assert set(dictionary["label_mapping"].label_names()).issubset(label_mapping.label_names()), (
                     f"The file {annotation_name} contains the labels"
-                    f" {set(mitk_data['label_mapping'].label_names()) - set(label_mapping.label_names())} that are not"
+                    f" {set(dictionary['label_mapping'].label_names()) - set(label_mapping.label_names())} that are not"
                     " defined in the label mapping of the dataset"
                 )
-            mask = label_mapping.map_tensor(mitk_data["mask"], mitk_data["label_mapping"])
+            mask = label_mapping.map_tensor(dictionary["mask"], dictionary["label_mapping"])
 
             if mask.ndim == 3:  # for multi layer nrrd files
                     layer_to_type = paths[0].dataset_settings[f"layer_to_type{mask.shape[0]}"]
@@ -361,6 +366,120 @@ class DatasetGeneratorAlex(DatasetGenerator):
             (target_dir / f"{path.image_name()}.html").write_text(html)
 
 
+    def copy_mitk_data(self) -> None:
+        target_paths = self.compile_image_dict() # dictionary of all unique images as keys, and the paths containing that image as values. Only multiple paths if the image has been duplicated.
+        annotations_dir = settings.data_dirs.mitk_annotations# this is the directory with the annotations
+        annotations_dir = Path(annotations_dir)
+        # Create a set of available annotation files for quick lookup
+        available_annotations = {file.name for file in annotations_dir.iterdir() if file.is_file()}
+        for image_name, paths in target_paths.items():
+            print(image_name, paths)
+            nrrd = f"{image_name}.nrrd"
+            if nrrd in available_annotations:
+                for path in paths:
+                    mitk = path()/"MITK"
+                    mitk.mkdir(parents=True, exist_ok=True)
+                    assert image_name == path.image_name()
+                    shutil.copy(annotations_dir / nrrd, mitk)
+            else:
+                settings.log.warn("found an image without an annotation")
+        self.copied_mitk = True
+
+    @staticmethod
+    def _extend_meta_labels(label: str, meta_labels: dict, p: DataPath) -> None:
+        if label not in meta_labels["image_labels"]:
+            meta_labels["image_labels"].append(label)
+            meta_labels["image_labels"] = sorted(set(meta_labels["image_labels"]))
+
+        for label_file in sorted(p().glob("_labelling*")):
+            if "paper_tags" not in meta_labels:
+                meta_labels["paper_tags"] = []
+
+            if label_file.stem not in meta_labels["paper_tags"]:
+                meta_labels["paper_tags"].append(label_file.stem)
+
+            # Convert standardized information to a structured format (if available)
+            match = re.search(r"_labelling_standardized_situs_(\d+)", label_file.stem)
+            if match is not None:
+                situs = int(match.group(1))
+
+                if "label_meta" not in meta_labels:
+                    meta_labels["label_meta"] = {}
+                label_meta = meta_labels["label_meta"]
+                if label not in label_meta:
+                    label_meta[label] = {}
+                current_label_meta = label_meta[label]
+
+                if "situs" in current_label_meta:
+                    assert (
+                        current_label_meta["situs"] == situs
+                    ), f"Found different situs for the label: {label} (path {p})"
+                else:
+                    current_label_meta["situs"] = situs
+
+                match = re.search(
+                    r"_labelling_standardized_situs_(\d+)_angle_(\d+)_repetition_(\d+)", label_file.stem
+                )
+                if match is not None:
+                    angle = angle_mapping[int(match.group(2))]
+                    repetition = int(match.group(3))
+                    if "angle" in current_label_meta:
+                        assert current_label_meta["angle"] == angle, f"Found different angle for the label: {label}"
+                    else:
+                        current_label_meta["angle"] = angle
+                    if "repetition" in current_label_meta:
+                        assert (
+                            current_label_meta["repetition"] == repetition
+                        ), f"Found different repetition for the label: {label}"
+                    else:
+                        current_label_meta["repetition"] = repetition
+    def _yield_mitk_data(
+        self,
+        paths: list[DataPath]
+    ):
+        """
+        Yield data and annotations from a folder with MITK nrrd annotation files.
+
+        Args:
+            paths: List of image paths which all show the same image but annotate different parts in the image (since an image may be stored more than once in the original dataset).
+            hypergui_mapping: Information for every _hypergui_N folder. For each folder, a dictionary with the keys `annotation_type` (e.g. polygon or circle) and `annotator` (e.g. annotator1) must be provided. a "label" should also be provided
+
+        Yields:
+            dict: A dictionary containing the processed data for each path.
+        """
+        assert all(
+            p.timestamp == paths[0].timestamp for p in paths
+        ), "The timestamp for all image paths must be the same (identical image data)"
+
+        for p in paths:
+            meta_labels = {"image_labels": []}
+
+            # The path is only associated with one label
+            if hasattr(p, "organ"):
+                label = p.organ
+                self._extend_meta_labels(label, meta_labels, p)
+            if (p() / "MITK").exists():
+                mitk_dir = p() / "MITK"
+                for annotation in mitk_dir.iterdir():
+                    nrrd_contents = nrrd_mask(annotation)
+                    mask = nrrd_contents["mask"]
+                    mapping = nrrd_contents["label_mapping"]
+                    for label in mapping.label_names(): #extend the labels to cover everything in the mapping
+                        self._extend_meta_labels(label, meta_labels, p)
+                    yield {
+                        "path": p(),
+                        "meta_labels": meta_labels,
+                        "timestamp": p.timestamp,
+                        "annotation_type": "mitk",
+                        "annotator":"annotator1",
+                        "label_mapping":mapping,
+                        "mask": mask,
+                    }
+
+            
+
+
+
     def _yield_hypergui_data(
         self,
         paths: list[DataPath],
@@ -391,54 +510,6 @@ class DatasetGeneratorAlex(DatasetGenerator):
         self.missing_coordinates = []
 
         ignored_prefixes = (".", "_", "Thumbs.db")
-
-        def _extend_meta_labels(label: str, meta_labels: dict, p: DataPath) -> None:
-            if label not in meta_labels["image_labels"]:
-                meta_labels["image_labels"].append(label)
-                meta_labels["image_labels"] = sorted(set(meta_labels["image_labels"]))
-
-            for label_file in sorted(p().glob("_labelling*")):
-                if "paper_tags" not in meta_labels:
-                    meta_labels["paper_tags"] = []
-
-                if label_file.stem not in meta_labels["paper_tags"]:
-                    meta_labels["paper_tags"].append(label_file.stem)
-
-                # Convert standardized information to a structured format (if available)
-                match = re.search(r"_labelling_standardized_situs_(\d+)", label_file.stem)
-                if match is not None:
-                    situs = int(match.group(1))
-
-                    if "label_meta" not in meta_labels:
-                        meta_labels["label_meta"] = {}
-                    label_meta = meta_labels["label_meta"]
-                    if label not in label_meta:
-                        label_meta[label] = {}
-                    current_label_meta = label_meta[label]
-
-                    if "situs" in current_label_meta:
-                        assert (
-                            current_label_meta["situs"] == situs
-                        ), f"Found different situs for the label: {label} (path {p})"
-                    else:
-                        current_label_meta["situs"] = situs
-
-                    match = re.search(
-                        r"_labelling_standardized_situs_(\d+)_angle_(\d+)_repetition_(\d+)", label_file.stem
-                    )
-                    if match is not None:
-                        angle = angle_mapping[int(match.group(2))]
-                        repetition = int(match.group(3))
-                        if "angle" in current_label_meta:
-                            assert current_label_meta["angle"] == angle, f"Found different angle for the label: {label}"
-                        else:
-                            current_label_meta["angle"] = angle
-                        if "repetition" in current_label_meta:
-                            assert (
-                                current_label_meta["repetition"] == repetition
-                            ), f"Found different repetition for the label: {label}"
-                        else:
-                            current_label_meta["repetition"] = repetition
         
         for p in paths:
             meta_labels = {"image_labels": []}
@@ -446,11 +517,11 @@ class DatasetGeneratorAlex(DatasetGenerator):
             # The path is only associated with one label
             if hasattr(p, "organ"):
                 label = p.organ
-                _extend_meta_labels(label, meta_labels, p)
+                self._extend_meta_labels(label, meta_labels, p)
 
             for hypergui_dir in sorted(p().iterdir()): #goes through and assigns labels according to Hypergui mapping
                 #might have to also change if there are multiple subdatasets under the same label.
-                if hypergui_dir.is_dir() and hypergui_dir.name.startswith("_hypergui"):
+                if hypergui_dir.is_dir() and hypergui_dir.name.startswith("_hypergui") and hypergui_mapping is not None:
                     subdata_hypergui_name = f"{p.subdataset_name}#{hypergui_dir.name}" #subdata_hypergui_name is a string in the format: "subdatasetname#_hyperGUI_N"
                     if subdata_hypergui_name not in hypergui_mapping:
                     # settings.log.warning(
@@ -463,7 +534,7 @@ class DatasetGeneratorAlex(DatasetGenerator):
                     if "label_name" in annotation_info:
                         # The path is associated with multiple labels (each label with their own _hypergui_* folder)
                         label = annotation_info["label_name"]
-                        _extend_meta_labels(label, meta_labels, p) #this updates the Datapath objects metadata to include the label
+                        self._extend_meta_labels(label, meta_labels, p) #this updates the Datapath objects metadata to include the label
 
                     binary_path = hypergui_dir / "mask.csv"
                     if binary_path.exists():
@@ -491,9 +562,9 @@ class DatasetGeneratorAlex(DatasetGenerator):
 
 
 
-    def _hypergui_label_mapping(self) -> tuple[dict[str, int], int]:
+    def _hypergui_mitk_label_mapping(self) -> tuple[dict[str, int], int]:
         """
-        Crawls the dataset and searches for all annotated labels, i.e. labels with annotations (png files). Labels which only occur as image labels are not considered.
+        Crawls the dataset and searches for all annotated labels, i.e. labels with annotations (png or nrrd files). Labels which only occur as image labels are not considered.
 
         Returns: A label mapping and the index of the last valid label (i.e. the last label which is neither overlap nor unlabeled).
         """
@@ -502,8 +573,11 @@ class DatasetGeneratorAlex(DatasetGenerator):
         
         for image_name, paths in (self.compile_image_dict()).items():
             for dictionary in self._yield_hypergui_data(paths, self.subdata_hypergui_mapping):
-                label = dictionary['label'] 
+                label = dictionary['label']
                 all_labels.add(label)
+            for dictionary in self._yield_mitk_data(paths):
+                for label in dictionary['label_mapping'].label_names():
+                    all_labels.add(label)
         
         
         
@@ -524,7 +598,7 @@ if __name__ == "__main__":
     # The path argument for DatasetGenerator can be set to 2021_02_05_Tivita_multiorgan_masks dataset paths. Example:
     # screen -S dataset_masks -d -m script -q -c "htc dataset_masks --input-path /mnt/E130-Projekte/Biophotonics/Data/2020_07_23_hyperspectral_MIC_organ_database/data/Catalogization_tissue_atlas" dataset_masks.log
     external_path = external = settings.external_dir['PATH_HTC_EXTERNAL']['path_dataset']
-    generator = DatasetGeneratorAlex.from_parser(output_path=external_path, subdata_hypergui_mapping = external_path / 'subdata-hypergui-mapping.json')
+    generator = DatasetGeneratorUrology.from_parser(output_path=external_path, subdata_hypergui_mapping = external_path / 'subdata-hypergui-mapping.json')
     # need ot set the subdata_hypergui_mapping. not sure where that happens
     
     

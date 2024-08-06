@@ -1,13 +1,12 @@
+# SPDX-FileCopyrightText: 2022 Division of Intelligent Medical Systems, DKFZ
+# SPDX-License-Identifier: MIT
 """
 Lucas Steinberger
 04.06.2024
-draft of Child DataPath class module, to be used to make the existing htc framework compatible with the tissue atlas folder structure.
-Main goals:
-    -revise iterate function so that it matches structure of tissue atlas. (starting from "data" directory in larger dataset. )
-    -retain each paths ability to find its subject and other data, that is useful for filters. 
-    -deal with dependencies in the dataPath object that expect a "data" and "intermediates" directory
-    -enable user to externally and explicitly specify a dataset_settings.json file for their dataset, so it can live outside the folder structure.
-    """
+NOW DEFUNCT. USE  DataPathAtlas2.py
+
+
+"""
 
 
 #imports based on DataPathTivita.py

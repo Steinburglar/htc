@@ -8,9 +8,9 @@ eval "$(conda shell.bash hook)"
 conda activate htc-dev
 
 # Define the path to your configuration file as a string
-config_path="/omics/groups/OE0645/internal/data/htcdata/medium_test/external/data/testSegment_config.json"
+config_path="/omics/groups/OE0645/internal/data/htcdata/medium_test/external/data/Atlas_config.json"
 
-htc training --model image --config $config_path
+htc training --model median_pxel --config $config_path #make sure the model matches the model you want to use (i.e, image for segmetation, or median_pixel for tissue spectra classification)
 
 #After saving, before submitting job, do: 
 #chmod +x training.sh

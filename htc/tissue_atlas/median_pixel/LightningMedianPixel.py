@@ -40,6 +40,7 @@ class LightningMedianPixel(HTCLightning):
         return DatasetMedianPixel(**kwargs)
 
     def train_dataloader(self) -> DataLoader:
+        print("train_dataloader")
         if self.config["input/oversampling"]:
             config = copy.copy(self.config)
             config["model/class_weight_method"] = "1∕m"  # This gives the "true" values needed for oversampling
@@ -52,15 +53,16 @@ class LightningMedianPixel(HTCLightning):
             sampler = WeightedRandomSampler(sample_weights, num_samples=self.config["input/epoch_size"])
         else:
             sampler = RandomSampler(self.dataset_train, replacement=True, num_samples=self.config["input/epoch_size"])
-
+        print("b")
         return DataLoader(
-            self.dataset_train, sampler=sampler, persistent_workers=True, **self.config["dataloader_kwargs"]
+            self.dataset_train, sampler=sampler, persistent_workers=False, **self.config["dataloader_kwargs"]
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)["class"]
 
     def training_step(self, batch: dict[str, torch.Tensor], batch_idx: int) -> dict:
+        #print("training_step")
         labels = batch["labels"]
         features = batch["features"]
 

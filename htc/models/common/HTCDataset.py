@@ -55,6 +55,7 @@ class HTCDataset(ABC, Dataset):
                 device="cpu",
             )
         elif not self.train and self.config["input/test_time_transforms_cpu"]:
+
             self.transforms = HTCTransformation.parse_transforms(
                 self.config["input/test_time_transforms_cpu"],
                 initial_dtype=self.features_dtype,

@@ -90,7 +90,6 @@ class FoldTrainer:
             fraction = np.clip(fraction, 0, 1).item()
             torch.cuda.set_per_process_memory_fraction(fraction)
             torch.cuda.empty_cache()
-
         # Log file per fold
         file_log_handler.set_filename(model_dir / "log.txt", mode="w")
 
@@ -109,7 +108,6 @@ class FoldTrainer:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-
         # Create datasets based on the paths in the data specs
         train_paths = []
         test_paths = []
@@ -124,7 +122,6 @@ class FoldTrainer:
                 datasets_val.append(dataset)
             else:
                 settings.log_once.info(f"The split {name} is not used for training (neither starts with train nor val)")
-
         if test:
             # To avoid potential errors, we activate the test set only temporarily to get the paths
             # If other classes access the specs, they cannot accidentally access the test set
@@ -200,7 +197,6 @@ class FoldTrainer:
             self.config["swa_kwargs/swa_lrs"] = infer_swa_lr(self.config)
             swa = StochasticWeightAveraging(**self.config["swa_kwargs"])
             callbacks.append(swa)
-
         # May be faster on a 3090 and should not hurt (https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision)
         torch.set_float32_matmul_precision("high")
 
@@ -209,7 +205,6 @@ class FoldTrainer:
 
         # Sanity check is disabled since it only leads to problems (duplicate epoch number, incomplete dataset)
         trainer = Trainer(logger=logger, callbacks=callbacks, num_sanity_val_steps=0, **self.config["trainer_kwargs"])
-
         # There are some problems on the cluster if too many threads are used because then more CPUs are used as available for the job
         # Hopefully, this with block limits the issue (right now there was only an issue on the main process)
         with threadpool_limits(2), warnings.catch_warnings():
@@ -226,15 +221,15 @@ class FoldTrainer:
                 ),
                 category=UserWarning,
             )
-
             if self.config["wandb_kwargs"]:
                 wandb_logger = WandbLogger(save_dir=model_dir, **self.config["wandb_kwargs"])
                 wandb_logger.watch(module.model, log="all", log_freq=10)
-
+            print("pretrain")
             trainer.fit(module)
+            print("posttrain")
             if test and len(test_paths) > 0:
                 trainer.test(verbose=True, ckpt_path=test_ckpt_path)
-
+            
         # It might be good to know which keys in the config have never been accessed
         config_name = self.config["config_name"]
         unused_keys = self.config.unused_keys()
@@ -245,10 +240,8 @@ class FoldTrainer:
             )
             for key in unused_keys:
                 settings.log.warning(key)
-
         self.config.save_config(model_dir / "config.json")
         shutil.copy2(self.data_specs.path, model_dir / "data.json")
-
         # Inform the system monitor that the training is finished
         monitor_handle.send_signal(signal.SIGINT)
         try:

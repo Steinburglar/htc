@@ -1,3 +1,6 @@
+
+# SPDX-FileCopyrightText: 2022 Division of Intelligent Medical Systems, DKFZ
+# SPDX-License-Identifier: MIT
 """
 Lucas Steinberger
 04.06.2024
@@ -77,8 +80,22 @@ class DataPathAtlas(DataPath):
         return file_path.is_file()
         
         ##write the syntax when you can look it up and know what the file looks like
-    
-    
+    def contains_MITK(self):
+        """
+        Method to check if the MITK folder of the given path object contains any .nrrd file.
+        Useful for writing a filter function to filter out images missing .nrrd files in the MITK folder.
+        Returns:
+            Bool: returns True if at least one .nrrd file exists in the MITK folder, False otherwise
+        """
+        mitk_folder = self.image_dir / 'MITK'
+        
+        if not mitk_folder.is_dir():
+            return False
+        
+        nrrd_files = list(mitk_folder.glob('*.nrrd'))
+        
+        return len(nrrd_files) > 0
+        
     @staticmethod
     def iterate(
         data_dir: Path,
