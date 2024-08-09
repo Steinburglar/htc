@@ -55,7 +55,7 @@ class DatasetGeneratorUreter(DatasetGeneratorUrology):
         super().__init__(**kwargs)
 
 
-    @cached_property
+    @property
     def dataset_paths(self) -> dict[str, list[DataPath]]:
         """
         Dictionary with dataset name as key and list of paths as value. 
@@ -75,13 +75,11 @@ class DatasetGeneratorUreter(DatasetGeneratorUrology):
         filters = [filter_rl]
         if self.copied_mitk:
             filters.append(filter_mitk)
+            print("now filtering for paths woth MITK annotations")
         for data_dir in data_subdirectories:
             paths = list(DataPathUreter.iterate(data_dir, filters=filters))
             print(len(paths))
-            for path in paths:
-                print(path)
             name0 = paths[0].subdataset_name
-            print(name0)
             assert all(path.subdataset_name == name0 for path in paths), "Not all items are from the same subdataset"
             _dict[name0] = paths #set the ist of paths to
             
@@ -119,6 +117,7 @@ if __name__ == "__main__":
     # need ot set the subdata_hypergui_mapping. not sure where that happens
     
     generator.copy_mitk_data()
+    generator.copied_mitk = True
     generator._paths = None #we need to reset the paths here if we want to apply out MITK filter
     #this setup may seem confusing, because it is  
     generator.run_safe(generator.dataset_settings)
@@ -128,6 +127,6 @@ if __name__ == "__main__":
     list_of_paths_lists = list(paths_dict.values())
     p_map(generator.segmentations, list_of_paths_lists, num_cpus=2.0, task_name="Segmentation files") #the second argument should be a list of lists: a list of paths lists, each of which is the 
     generator.meta_table()
-    generator.median_spectra_table() #cant do because we dont have the proprietary function
+    #generator.median_spectra_table() #cant do because we dont have the proprietary function
     generator.preprocessed_files()   #also has a proprietary component
     #generator.view_organs()

@@ -36,24 +36,26 @@ class MetricAggregation:
             self.df = pd.read_pickle(path_or_df)
         else:
             raise ValueError("Neither a dataframe nor path given")
-
+        print(self.df.keys())
         assert all(m in self.df for m in self.metrics), f"Not all metrics are in the dataframe ({self.df.columns})"
 
         if "subject_name" not in self.df and "image_name" in self.df:
+            print("triggered missing subject name")
             type_infos = []
             for name in self.df["image_name"]:
-                if DataPath.image_name_exists(name):
-                    type_infos.append(DataPath.from_image_name(name).image_name_typed())
-                else:
+                #if DataPath.image_name_exists(name):
+                    #type_infos.append(DataPath.from_image_name(name).image_name_typed())
+                #else:
                     # If the path is not available (e.g. because the user has no access to the dataset), then assume the first part is the image name
-                    subject_name = name.split("#")[0]
-                    assert subject_name != "ref", f"Cannot infer subject name from references: {name}"
-                    type_infos.append({"subject_name": subject_name})
+                subject_name = name.split("#")[0]
+                assert subject_name != "ref", f"Cannot infer subject name from references: {name}"
+                type_infos.append({"subject_name": subject_name})
 
             # Reconstruct missing information
             df_meta = pd.DataFrame(type_infos)
             self.df = pd.concat([self.df.reset_index(drop=True), df_meta], axis=1)
             assert len(df_meta) == len(self.df), "The length of the dataframe should not change"
+            print(self.df.keys())
 
         assert "subject_name" in self.df.columns, "The dataframe misses some of the required columns"
 

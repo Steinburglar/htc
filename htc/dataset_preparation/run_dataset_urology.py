@@ -104,7 +104,7 @@ class DatasetGeneratorUrology(DatasetGenerator):
         
     
     
-    @cached_property
+    @property
     def dataset_paths(self) -> dict[str, list[DataPath]]:
         """
         Dictionary with dataset name as key and list of paths as value. 

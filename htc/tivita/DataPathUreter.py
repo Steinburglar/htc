@@ -156,7 +156,7 @@ class DataPathUreter(DataPath):
                     for root, dirs, files in os.walk(timestamp_dir):
                         dirs.sort()  # Recurse in sorted order
                         for f in sorted(files):
-                            if f.endswith(("SpecCube.dat", ".tiv")) and root not in used_folders:
+                            if f.endswith("SpecCube.dat",) and root not in used_folders:
                                 path = DataPathUreter(Path(root), data_dir, intermediates_dir, dataset_settings, annotation_name)
                                 if all(f(path) for f in filters):
                                     used_folders.add(root)
