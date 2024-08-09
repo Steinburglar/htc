@@ -6,6 +6,11 @@
 [![Tests](https://github.com/IMSY-DKFZ/htc/actions/workflows/tests.yml/badge.svg)](https://github.com/IMSY-DKFZ/htc/actions/workflows/tests.yml)
 </div>
 
+# Disclaimer:
+This is a forked version of the original htc framework by the DKFZ, modified for use by the Intelligent Systems and Robotics in Urology group of the DKFZ. The changes made are mostly entirely new files, but some of the original code has been changed as well. All copyright still belongs to the original authors, and the author has included the SPDX copyright text in all scripts capied in whole or in part from the original htc codebase.
+
+
+
 # Hyperspectral Tissue Classification
 This package is a framework for automated tissue classification and segmentation on medical hyperspectral imaging (HSI) data. It contains:
 
