@@ -7,7 +7,7 @@
 </div>
 
 # Disclaimer:
-This is a forked version of the original htc framework by the DKFZ, modified for use by the Intelligent Systems and Robotics in Urology group of the DKFZ. The changes made are mostly entirely new files, but some of the original code has been changed as well. All copyright still belongs to the original authors, and the author has included the SPDX copyright text in all scripts capied in whole or in part from the original htc codebase.
+This is a forked version of the original htc framework by the DKFZ, modified for use by the Intelligent Systems and Robotics in Urology group of the DKFZ. The changes made are mostly entirely new files, but some of the original code has been changed as well. All copyright still belongs to the original authors, and the author has included the SPDX copyright text in all scripts copied in whole or in part from the original htc codebase.
 
 
 
@@ -52,7 +52,7 @@ If you use the `htc` framework, please consider citing the [corresponding papers
 
 ## Setup
 IMPORTANT!: for the modified version of the htc framework for use with Tissue atlas data, there is no package installation available. Instead, you must clone the repository from the github (be sure to clone this fork, the one owned by user Steinburglar).
-I recommend cloning it as a development environment with conda. see below for further instructions: **write these lucas**
+I recommend cloning it as a development environment with conda. see below for further instructions.
 
 ### Package Installation
 This package can be installed via pip:
